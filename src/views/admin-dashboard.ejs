@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>仪表盘</title>
+  <%- include('partials-admin-style') %>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    .kpi-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+    @media (max-width:1100px){ .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr));} }
+    .kpi { background:#f8fbff; border:1px solid #dce7f1; border-radius:12px; padding:12px; }
+    .kpi h4{ margin:0 0 6px; font-size:13px; color:#475467; }
+    .kpi strong{ font-size:22px; }
+    .chart-grid { display:grid; grid-template-columns:1fr; gap:12px; }
+    .pie-row { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    @media (max-width: 1000px) { .pie-row { grid-template-columns:1fr; } }
+    .chart-card { background:#fff; border:1px solid #dbe7f2; border-radius:12px; padding:12px; }
+    .chart-title{ margin:0 0 8px; font-size:15px; }
+    .canvas-wrap{ position:relative; height:280px; }
+    .filter-grid { display:grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap:8px; }
+    @media (max-width:1100px){ .filter-grid{ grid-template-columns: repeat(2,minmax(0,1fr)); } }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <%- include('partials-admin-nav',{user}) %>
+    <main class="main">
+      <section class="panel">
+        <h2>仪表盘</h2>
+        <form method="get" action="/admin/dashboard" class="filter-grid" style="margin-bottom:10px;">
+          <div>
+            <label>统计周期</label>
+            <select name="period" id="periodSelect">
+              <option value="today" <%= filters.period==='today'?'selected':'' %>>今天</option>
+              <option value="yesterday" <%= filters.period==='yesterday'?'selected':'' %>>昨天</option>
+              <option value="last24h" <%= filters.period==='last24h'?'selected':'' %>>近24小时</option>
+              <option value="last7d" <%= filters.period==='last7d'?'selected':'' %>>近7天</option>
+              <option value="last14d" <%= filters.period==='last14d'?'selected':'' %>>近14天</option>
+              <option value="last30d" <%= filters.period==='last30d'?'selected':'' %>>近30天</option>
+              <option value="thisMonth" <%= filters.period==='thisMonth'?'selected':'' %>>本月</option>
+              <option value="lastMonth" <%= filters.period==='lastMonth'?'selected':'' %>>上月</option>
+              <option value="custom" <%= filters.period==='custom'?'selected':'' %>>自定义日期</option>
+            </select>
+          </div>
+          <div>
+            <label>开始日期</label>
+            <input type="date" name="startDate" value="<%= filters.startDate || '' %>" />
+          </div>
+          <div>
+            <label>结束日期</label>
+            <input type="date" name="endDate" value="<%= filters.endDate || '' %>" />
+          </div>
+          <div style="display:flex;align-items:end;"><button type="submit">应用统计</button></div>
+        </form>
+
+        <div class="kpi-grid">
+          <div class="kpi"><h4>站点总数</h4><strong><%= stats.siteTotal %></strong><div class="muted">正常 <%= stats.siteEnabled %> / 异常 <%= stats.siteTotal - stats.siteEnabled %></div></div>
+          <div class="kpi"><h4>库存总数</h4><strong><%= stats.itemTotal %></strong><div class="muted">有货 <%= stats.itemInStock %> / 无货 <%= stats.itemOutStock %></div></div>
+          <div class="kpi"><h4>前台总点击</h4><strong><%= stats.clickTotal %></strong><div class="muted">今日 <%= stats.clickToday %></div></div>
+          <div class="kpi"><h4>前台访问总数</h4><strong><%= stats.viewTotal %></strong><div class="muted">今日 <%= stats.viewToday %></div></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="pie-row" style="margin-bottom:12px;">
+          <div class="chart-card">
+            <h3 class="chart-title">站点总数（正常同步 / 异常）</h3>
+            <div class="canvas-wrap"><canvas id="sitePie"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <h3 class="chart-title">库存总数（有货 / 无货）</h3>
+            <div class="canvas-wrap"><canvas id="stockPie"></canvas></div>
+          </div>
+        </div>
+        <div class="chart-grid">
+          <div class="chart-card">
+            <h3 class="chart-title">前台总点击数趋势</h3>
+            <div class="canvas-wrap"><canvas id="clickLine"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <h3 class="chart-title">前台访问总数趋势</h3>
+            <div class="canvas-wrap"><canvas id="viewLine"></canvas></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const clickLabels = <%- JSON.stringify((traffic.chart && traffic.chart.click && traffic.chart.click.labels) || []) %>;
+    const clickValues = <%- JSON.stringify((traffic.chart && traffic.chart.click && traffic.chart.click.values) || []) %>;
+    const viewLabels = <%- JSON.stringify((traffic.chart && traffic.chart.view && traffic.chart.view.labels) || []) %>;
+    const viewValues = <%- JSON.stringify((traffic.chart && traffic.chart.view && traffic.chart.view.values) || []) %>;
+
+    new Chart(document.getElementById('sitePie'), {
+      type: 'pie',
+      data: { labels: ['正常同步','异常'], datasets: [{ data: [<%= stats.siteEnabled %>, <%= Math.max(0, stats.siteTotal - stats.siteEnabled) %>], backgroundColor: ['#22c55e','#ef4444'] }] },
+      options: { responsive:true, maintainAspectRatio:false }
+    });
+
+    new Chart(document.getElementById('stockPie'), {
+      type: 'pie',
+      data: { labels: ['有货','无货'], datasets: [{ data: [<%= stats.itemInStock %>, <%= stats.itemOutStock %>], backgroundColor: ['#2563eb','#f59e0b'] }] },
+      options: { responsive:true, maintainAspectRatio:false }
+    });
+
+    new Chart(document.getElementById('clickLine'), {
+      type: 'line',
+      data: {
+        labels: clickLabels,
+        datasets: [{ label: '点击数', data: clickValues, borderColor: '#1d4ed8', backgroundColor:'rgba(29,78,216,0.15)', tension:0.35, fill:true, pointRadius:0, pointHoverRadius:0 }]
+      },
+      options: {
+        responsive:true,
+        maintainAspectRatio:false,
+        scales:{
+          x:{ ticks:{ maxRotation:0, minRotation:0 }, grid:{ drawOnChartArea:false, drawTicks:false }, border:{ display:false } },
+          y:{ beginAtZero:true, min:0, max:25, ticks:{ stepSize:5, callback:(v)=>(v===0?'':v) } }
+        }
+      }
+    });
+
+    new Chart(document.getElementById('viewLine'), {
+      type: 'line',
+      data: {
+        labels: viewLabels,
+        datasets: [{ label: '访问数', data: viewValues, borderColor: '#0ea5e9', backgroundColor:'rgba(14,165,233,0.15)', tension:0.35, fill:true, pointRadius:0, pointHoverRadius:0 }]
+      },
+      options: {
+        responsive:true,
+        maintainAspectRatio:false,
+        scales:{
+          x:{ ticks:{ maxRotation:0, minRotation:0 }, grid:{ drawOnChartArea:false, drawTicks:false }, border:{ display:false } },
+          y:{ beginAtZero:true, min:0, max:25, ticks:{ stepSize:5, callback:(v)=>(v===0?'':v) } }
+        }
+      }
+    });
+  </script>
+</body>
+</html>

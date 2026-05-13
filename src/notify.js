@@ -1,0 +1,16 @@
+import axios from 'axios';
+
+export async function sendTelegram(settings, message) {
+  const token = String(settings.telegram_bot_token || '').trim();
+  const chatId = String(settings.telegram_chat_id || '').trim();
+  if (!token || !chatId) return;
+  const url = `https://api.telegram.org/bot${token}/sendMessage`;
+  try {
+    await axios.post(url, {
+      chat_id: chatId,
+      text: message,
+      disable_web_page_preview: true
+    }, { timeout: 12000 });
+  } catch (_e) {
+  }
+}

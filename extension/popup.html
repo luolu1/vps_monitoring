@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Outlook Auto Login</title>
+    <style>
+      :root {
+        --bg: #f4f7fb;
+        --card: #ffffff;
+        --text: #1c2530;
+        --muted: #607080;
+        --line: #d4dde6;
+        --accent: #0b72e7;
+        --accent-strong: #085abb;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        background: radial-gradient(circle at top right, #e6f1ff, var(--bg) 55%);
+        color: var(--text);
+        width: 320px;
+      }
+
+      .wrap {
+        padding: 14px;
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 12px;
+        box-shadow: 0 8px 18px rgba(26, 43, 61, 0.08);
+      }
+
+      h1 {
+        font-size: 16px;
+        margin: 0 0 10px;
+      }
+
+      .hint {
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 10px;
+      }
+
+      label {
+        display: block;
+        font-size: 12px;
+        margin-bottom: 4px;
+      }
+
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        margin-bottom: 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px 10px;
+        font-size: 13px;
+      }
+
+      button {
+        width: 100%;
+        border: 0;
+        border-radius: 10px;
+        padding: 10px;
+        background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+        color: #fff;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+
+      .status {
+        margin-top: 10px;
+        min-height: 16px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>Outlook 自动登录</h1>
+        <div class="hint">点击后会在无痕窗口打开 Outlook 并自动填充。</div>
+
+        <label for="email">邮箱</label>
+        <input id="email" type="email" autocomplete="username" />
+
+        <label for="password">密码</label>
+        <input id="password" type="password" autocomplete="current-password" />
+
+        <label for="twoFactorCode">2FA（可选）</label>
+        <input id="twoFactorCode" type="text" inputmode="numeric" autocomplete="one-time-code" />
+
+        <button id="startBtn" type="button">打开无痕并登录</button>
+        <div id="status" class="status"></div>
+      </div>
+    </div>
+    <script src="popup.js"></script>
+  </body>
+</html>

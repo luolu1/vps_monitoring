@@ -1,0 +1,22 @@
+{
+  "name": "vps-inventory-monitor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "VPS inventory monitoring web app with admin backend",
+  "type": "module",
+  "scripts": {
+    "dev": "node src/server.js",
+    "start": "node src/server.js",
+    "check": "node -e \"console.log('ok')\""
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "cheerio": "^1.0.0",
+    "dotenv": "^16.4.7",
+    "ejs": "^3.1.10",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1",
+    "node-cron": "^3.0.3",
+    "playwright": "^1.54.2"
+  }
+}

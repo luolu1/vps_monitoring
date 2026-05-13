@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>编辑站点 - <%= site.name %></title>
+  <style>
+    :root {
+      --bg: #f5f8fb;
+      --panel: #fff;
+      --line: #d7e3ea;
+      --text: #1f2a37;
+      --muted: #61707d;
+      --btn: #0f766e;
+      --btn2: #155e75;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "IBM Plex Sans", "Noto Sans SC", sans-serif; background: var(--bg); color: var(--text); }
+    .wrap { max-width: 900px; margin: 20px auto; padding: 0 12px; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+    label { display: block; font-size: 13px; margin-bottom: 4px; }
+    input { width: 100%; border: 1px solid var(--line); border-radius: 9px; padding: 9px 10px; font-family: inherit; }
+    .btn { border: 0; border-radius: 9px; padding: 9px 12px; background: var(--btn); color: #fff; text-decoration: none; cursor: pointer; }
+    .btn-alt { background: var(--btn2); }
+    .muted { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <h2>编辑站点</h2>
+      <form method="post" action="/admin/sites/<%= site.id %>/edit">
+        <div class="grid">
+          <div>
+            <label>站点名称</label>
+            <input name="name" value="<%= site.name %>" required />
+          </div>
+          <div>
+            <label>监控URL / AFF链接</label>
+            <input name="url" value="<%= site.url %>" required />
+          </div>
+          <div>
+            <label>站点架构</label>
+            <select name="parserType">
+              <option value="whmcs" <%= (site.parser_type || 'whmcs') === 'whmcs' ? 'selected' : '' %>>WHMCS</option>
+            </select>
+          </div>
+          <div class="muted" style="grid-column: 1 / -1;">请填写AFF基础链接，例如：http://technovm.com/aff.php?aff=217</div>
+          <div>
+            <label><input type="checkbox" name="enabled" <%= site.enabled ? 'checked' : '' %> /> 启用监控</label>
+          </div>
+          <div>
+            <label><input type="checkbox" name="autoEnabled" <%= site.auto_enabled ? 'checked' : '' %> /> 启用自动检测</label>
+          </div>
+          <div>
+            <label>自动检测间隔（分钟）</label>
+            <input type="number" name="checkIntervalMinutes" min="1" value="<%= site.check_interval_minutes || 5 %>" required />
+          </div>
+          <div>
+            <label>请求超时（毫秒）</label>
+            <input type="number" name="requestTimeoutMs" min="3000" value="<%= site.request_timeout_ms || 20000 %>" required />
+          </div>
+          <div>
+            <label>失败重试次数</label>
+            <input type="number" name="retryCount" min="0" value="<%= site.retry_count || 2 %>" required />
+          </div>
+          <div>
+            <label>抓取模式</label>
+            <select name="fetchMode">
+              <option value="http" <%= site.fetch_mode === 'http' ? 'selected' : '' %>>HTTP（快）</option>
+              <option value="browser" <%= site.fetch_mode === 'browser' ? 'selected' : '' %>>Browser（过CF）</option>
+            </select>
+          </div>
+          <div>
+            <label>CF等待时间（毫秒）</label>
+            <input type="number" name="cfWaitMs" min="3000" value="<%= site.cf_wait_ms || 7000 %>" required />
+          </div>
+        </div>
+        <div style="margin-top:12px;">
+          <button class="btn" type="submit">保存修改</button>
+          <a class="btn btn-alt" href="/admin">返回列表</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>登录 - VPS监控</title>
+  <style>
+    :root {
+      --bg: #f4f2ea;
+      --panel: #fffdf8;
+      --text: #1f2a37;
+      --accent: #a44a3f;
+      --muted: #6b7280;
+      --line: #e6ddcc;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", serif;
+      color: var(--text);
+      background: radial-gradient(circle at 20% 20%, #f7efe0, var(--bg));
+    }
+    .card {
+      width: min(92vw, 420px);
+      padding: 28px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel);
+      box-shadow: 0 14px 40px rgba(88, 61, 38, 0.12);
+      animation: fade-in 450ms ease;
+    }
+    h1 { margin: 0 0 16px; font-size: 1.6rem; }
+    label { display: block; margin: 10px 0 6px; }
+    input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+      font-family: inherit;
+      background: #fff;
+    }
+    button {
+      margin-top: 16px;
+      width: 100%;
+      border: 0;
+      border-radius: 10px;
+      padding: 11px;
+      background: var(--accent);
+      color: #fff;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .error { color: #b42318; margin-top: 10px; }
+    .tip { margin-top: 14px; color: var(--muted); font-size: 13px; }
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>VPS库存监控后台</h1>
+    <form method="post" action="/login">
+      <label for="username">用户名</label>
+      <input id="username" name="username" required />
+
+      <label for="password">密码</label>
+      <input id="password" name="password" type="password" required />
+
+      <button type="submit">登录</button>
+      <% if (error) { %>
+        <div class="error"><%= error %></div>
+      <% } %>
+      <div class="tip">默认账户：admin / admin123</div>
+    </form>
+  </div>
+</body>
+</html>

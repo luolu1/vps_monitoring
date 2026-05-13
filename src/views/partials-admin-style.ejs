@@ -1,0 +1,16 @@
+<style>
+  :root { --bg:#f2f5f9; --panel:#fff; --text:#1d2939; --muted:#667085; --line:#d7e2ec; --primary:#0f766e; --primary2:#0e5f58; --danger:#b42318; --ok:#147a48; }
+  *{box-sizing:border-box} body{margin:0;font-family:"IBM Plex Sans","Noto Sans SC",sans-serif;color:var(--text);background:radial-gradient(circle at 10% 10%,#eef6f8,var(--bg));}
+  .layout{max-width:1380px;margin:16px auto;padding:0 12px;display:grid;grid-template-columns:260px 1fr;gap:14px}
+  @media (max-width:1000px){.layout{grid-template-columns:1fr}}
+  .side,.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px}
+  .side{padding:14px;position:sticky;top:10px;height:fit-content}.brand{font-size:18px;font-weight:700;margin:0 0 6px}.muted{color:var(--muted)}
+  .nav h4{margin:14px 0 6px;font-size:13px;color:#344054}.nav a{display:block;text-decoration:none;color:#123;padding:7px 9px;border-radius:8px;font-size:13px}.nav a:hover{background:#edf6f5}
+  .main{display:grid;gap:12px}.panel{padding:14px} h2{margin:0 0 10px;font-size:18px} h3{margin:0 0 10px;font-size:16px}
+  .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px} @media (max-width:900px){.grid{grid-template-columns:1fr}}
+  label{display:block;font-size:13px;margin-bottom:4px} input,select{width:100%;border:1px solid var(--line);border-radius:9px;padding:9px 10px;font-family:inherit}
+  button,.btn{border:0;background:var(--primary);color:#fff;border-radius:9px;padding:8px 11px;cursor:pointer;text-decoration:none;display:inline-block;font-size:12px}
+  button:hover,.btn:hover{background:var(--primary2)} .btn-danger{background:var(--danger)}
+  table{width:100%;border-collapse:collapse;font-size:12px} th,td{border-bottom:1px solid var(--line);text-align:left;padding:7px 6px;vertical-align:top}
+  .ok{color:var(--ok);font-weight:700}.bad{color:var(--danger);font-weight:700}
+</style>

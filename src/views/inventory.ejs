@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>库存明细 - <%= site.name %></title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --panel: #fff;
+      --line: #d9e2ee;
+      --text: #1f2937;
+      --muted: #667085;
+      --ok: #157f3d;
+      --bad: #b42318;
+      --btn: #1d4ed8;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "IBM Plex Sans", "Noto Sans SC", sans-serif; color: var(--text); background: var(--bg); }
+    .wrap { max-width: 1080px; margin: 18px auto; padding: 0 12px; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+    h1 { margin: 0 0 8px; }
+    .muted { color: var(--muted); margin-bottom: 10px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 8px 6px; text-align: left; }
+    .ok { color: var(--ok); font-weight: 700; }
+    .bad { color: var(--bad); font-weight: 700; }
+    .btn { background: var(--btn); color: #fff; border-radius: 8px; padding: 8px 10px; text-decoration: none; display: inline-block; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <a class="btn" href="/admin">返回后台</a>
+      <h1><%= site.name %> 库存明细</h1>
+      <div class="muted">站点：<%= site.url %> | AFF：<%= site.aff_base_url %></div>
+
+      <table>
+        <thead>
+          <tr><th>ID</th><th>标题</th><th>国家</th><th>价格</th><th>库存</th><th>配置</th><th>最后检测</th><th>AFF链接</th></tr>
+        </thead>
+        <tbody>
+          <% if (items.length === 0) { %>
+            <tr><td colspan="8">暂无数据，请先执行检测</td></tr>
+          <% } %>
+          <% items.forEach((item) => {
+               let aff = '';
+               let config = '';
+               let billingPeriod = '';
+               let country = '未知';
+               try {
+                 const raw = JSON.parse(item.raw_json || '{}');
+                 aff = raw.affLink || '';
+                 config = raw.config || '';
+                 billingPeriod = raw.billingPeriod || '';
+                 country = raw.country || '未知';
+               } catch (e) {
+                 aff = '';
+                 config = '';
+                 billingPeriod = '';
+                 country = '未知';
+               }
+          %>
+            <tr>
+              <td><%= item.id %></td>
+              <td><%= item.title %></td>
+              <td><%= country %></td>
+              <td><%= item.price %><%= billingPeriod %></td>
+              <td class="<%= item.in_stock ? 'ok' : 'bad' %>"><%= item.in_stock ? '有货' : '无货' %></td>
+              <td><%= config || '-' %></td>
+              <td><%= item.last_seen_at %></td>
+              <td><a href="<%= aff %>" target="_blank"><%= aff %></a></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

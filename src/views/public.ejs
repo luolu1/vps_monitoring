@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= settings.public_title %></title>
+  <style>
+    :root {
+      --bg: #f4f8fb;
+      --panel: #fff;
+      --line: #dbe6ee;
+      --text: #1f2d3d;
+      --muted: #667085;
+      --ok: #177245;
+      --bad: #b42318;
+      --btn: #1d4ed8;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Microsoft YaHei", "微软雅黑", "Noto Sans SC", sans-serif; font-weight: 700; color: var(--text); background: radial-gradient(circle at 10% 5%, #dceefc, #f8fafc 45%, #eef4fb); }
+    <% if (settings.public_background_image) { %>
+    body { background-image: url('<%= settings.public_background_image %>'); background-size: cover; background-position: center; background-attachment: fixed; }
+    <% } %>
+    .wrap { max-width: 1200px; margin: 18px auto; padding: 0 12px 30px; }
+    .head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+    .panel { background: rgba(255,255,255,0.62); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.45); border-radius: 14px; padding: 14px; box-shadow: 0 10px 30px rgba(14, 31, 53, 0.08); }
+    .merchant-list { display:grid; gap:8px; margin-bottom:12px; }
+    .merchant-card { background: rgba(255,255,255,0.75); border:1px solid #dce8f4; border-radius:12px; padding:10px; }
+    .merchant-head { display:grid; grid-template-columns: 2fr 2fr 1fr; align-items:center; gap:8px; margin-bottom:8px; }
+    .merchant-columns { display:grid; grid-template-columns: 2fr 2fr 1fr; align-items:center; gap:8px; }
+    .sq-wrap { display:flex; gap:4px; flex-wrap:wrap; }
+    .sq { width:10px; height:10px; border-radius:2px; background:#d1d5db; }
+    .sq.ok { background:#22c55e; }
+    .sq.bad { background:#ef4444; }
+    .filters { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+    @media (max-width: 1100px) { .filters { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    @media (max-width: 900px) { .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 560px) { .filters { grid-template-columns: 1fr; } }
+    label { display: block; font-size: 12px; margin-bottom: 4px; color: var(--muted); }
+    input, select { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 8px 9px; font-family: inherit; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border-bottom: 1px solid var(--line); text-align: left; padding: 8px 6px; vertical-align: top; }
+    .ok { color: var(--ok); font-weight: 700; }
+    .bad { color: var(--bad); font-weight: 700; }
+    .muted { color: var(--muted); }
+    .btn { background: linear-gradient(135deg, #1d4ed8, #2563eb); color: #fff; text-decoration: none; border-radius: 999px; padding: 8px 12px; display: inline-block; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <h1 style="margin:0;"><%= settings.public_title %></h1>
+    </div>
+    <div class="panel">
+      <div class="muted" style="margin-bottom:8px;">仅展示已启用监控站点的最新库存</div>
+      <form id="filterForm" method="get" action="/" class="filters">
+        <div>
+          <label>商家</label>
+          <select name="merchant">
+            <option value="">全部商家</option>
+            <% merchants.forEach((m) => { %>
+              <option value="<%= m %>" <%= filters.merchant === m ? 'selected' : '' %>><%= m %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div>
+          <label>国家</label>
+          <select name="country">
+            <option value="">全部国家</option>
+            <% countries.forEach((c) => { %>
+              <option value="<%= c %>" <%= filters.country === c ? 'selected' : '' %>><%= c %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div>
+          <label>库存</label>
+          <select name="stock">
+            <option value="" <%= !filters.stock ? 'selected' : '' %>>全部</option>
+            <option value="in" <%= filters.stock === 'in' ? 'selected' : '' %>>有货</option>
+            <option value="out" <%= filters.stock === 'out' ? 'selected' : '' %>>无货</option>
+          </select>
+        </div>
+        <div>
+          <label>最低价格</label>
+          <select name="currency">
+            <option value="" <%= !filters.currency ? 'selected' : '' %>>全部货币</option>
+            <option value="CNY" <%= filters.currency === 'CNY' ? 'selected' : '' %>>CNY</option>
+            <option value="USD" <%= filters.currency === 'USD' ? 'selected' : '' %>>USD</option>
+            <option value="HKD" <%= filters.currency === 'HKD' ? 'selected' : '' %>>HKD</option>
+            <option value="EUR" <%= filters.currency === 'EUR' ? 'selected' : '' %>>EUR</option>
+          </select>
+        </div>
+        <div>
+          <label>价格区间（如 1-20）</label>
+          <input name="priceRange" placeholder="1-20" value="<%= filters.priceRange || '' %>" />
+        </div>
+      </form>
+      <% if (!isFiltered) { %>
+        <div class="muted merchant-columns" style="margin-bottom:8px;"><span>商家</span><span>状态</span><span>产品数量</span></div>
+        <div class="merchant-list">
+          <% merchantCards.forEach((m) => { %>
+            <details class="merchant-card">
+              <summary class="merchant-head" style="cursor:pointer; list-style:none;">
+                <span><strong><%= m.siteName %></strong></span>
+                <span class="sq-wrap"><% m.squares.forEach((s) => { %><span class="sq <%= s %>"></span><% }) %></span>
+                <span><strong><%= m.productCount %></strong></span>
+              </summary>
+              <table>
+                <thead>
+                  <tr><th>标题</th><th>国家</th><th>价格</th><th>库存</th><th>配置</th><th>购买</th><th>更新时间</th></tr>
+                </thead>
+                <tbody>
+                  <% items.filter((it)=>it.site_name===m.siteName).forEach((item) => {
+                       let raw = {};
+                       try { raw = JSON.parse(item.raw_json || '{}'); } catch (e) { raw = {}; }
+                  %>
+                    <tr>
+                      <td><%= item.title %></td>
+                      <td>
+                        <% const country = raw.country || '未知'; %>
+                        <% const iconMap = {'中国香港':'HK','中国台湾':'TW','日本':'JP','新加坡':'SG','美国':'US','英国':'UK','德国':'DE','加拿大':'CA','韩国':'KR','法国':'FR','荷兰':'NL','澳大利亚':'AU'}; %>
+                        <% const codes = String(country).split('/').map((c)=>c.trim()).map((c)=>iconMap[c]).filter(Boolean); %>
+                        <span><%= codes.length ? codes.join(' ') : 'UN' %> <%= country %></span>
+                      </td>
+                      <td><%= item.price %><%= raw.billingPeriod || '' %></td>
+                      <td class="<%= item.in_stock ? 'ok' : 'bad' %>"><%= item.in_stock ? '有货' : '无货' %></td>
+                      <td><%= raw.config || '-' %></td>
+                      <td><% if (raw.affLink) { %><a class="btn buy-link" href="<%= raw.affLink %>" target="_blank" data-item-id="<%= item.id %>" data-site-id="<%= item.site_id %>">点击购买</a><% } else { %>-<% } %></td>
+                      <td><%= item.last_seen_at %></td>
+                    </tr>
+                  <% }) %>
+                </tbody>
+              </table>
+            </details>
+          <% }) %>
+        </div>
+      <% } else { %>
+        <table>
+            <thead>
+              <tr><th>商家</th><th>标题</th><th>国家</th><th>价格</th><th>库存</th><th>配置</th><th>购买</th><th>更新时间</th></tr>
+            </thead>
+            <tbody>
+              <% if (items.length === 0) { %><tr><td colspan="8">暂无筛选数据</td></tr><% } %>
+              <% items.forEach((item) => {
+                   let raw = {};
+                   try { raw = JSON.parse(item.raw_json || '{}'); } catch (e) { raw = {}; }
+              %>
+                <tr>
+                  <td><%= item.site_name %></td>
+                  <td><%= item.title %></td>
+                  <td>
+                    <% const country = raw.country || '未知'; %>
+                    <% const iconMap = {
+                      '中国香港':'HK', '中国台湾':'TW', '日本':'JP', '新加坡':'SG', '美国':'US', '英国':'UK', '德国':'DE', '加拿大':'CA', '韩国':'KR', '法国':'FR', '荷兰':'NL', '澳大利亚':'AU'
+                    }; %>
+                    <% const codes = String(country).split('/').map((c)=>c.trim()).map((c)=>iconMap[c]).filter(Boolean); %>
+                    <span><%= codes.length ? codes.join(' ') : 'UN' %> <%= country %></span>
+                  </td>
+                  <td><%= item.price %><%= raw.billingPeriod || '' %></td>
+                  <td class="<%= item.in_stock ? 'ok' : 'bad' %>"><%= item.in_stock ? '有货' : '无货' %></td>
+                  <td><%= raw.config || '-' %></td>
+                  <td>
+                    <% if (raw.affLink) { %>
+                      <a class="btn buy-link" href="<%= raw.affLink %>" target="_blank" data-item-id="<%= item.id %>" data-site-id="<%= item.site_id %>">点击购买</a>
+                    <% } else { %>
+                      -
+                    <% } %>
+                  </td>
+                  <td><%= item.last_seen_at %></td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+      <% } %>
+    </div>
+  </div>
+</body>
+<script>
+  (function () {
+    var form = document.getElementById('filterForm');
+    if (!form) return;
+    var controls = form.querySelectorAll('select,input');
+    controls.forEach(function (el) {
+      el.addEventListener('change', function () { form.submit(); });
+      if (el.tagName === 'INPUT') {
+        el.addEventListener('blur', function () { form.submit(); });
+      }
+    });
+
+    var buyLinks = document.querySelectorAll('.buy-link');
+    buyLinks.forEach(function (a) {
+      a.addEventListener('click', function () {
+        var itemId = Number(a.getAttribute('data-item-id') || 0);
+        var siteId = Number(a.getAttribute('data-site-id') || 0);
+        if (!itemId || !siteId) return;
+        var payload = JSON.stringify({ itemId: itemId, siteId: siteId });
+        if (navigator.sendBeacon) {
+          var blob = new Blob([payload], { type: 'application/json' });
+          navigator.sendBeacon('/track-click', blob);
+        } else {
+          fetch('/track-click', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: payload,
+            keepalive: true
+          }).catch(function () {});
+        }
+      });
+    });
+  })();
+</script>
+</html>
