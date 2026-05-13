@@ -24,11 +24,11 @@
 </head>
 <body>
   <div class="layout">
-    <%- include('partials-admin-nav',{user}) %>
+    <%- include('partials-admin-nav',{user, adminBase}) %>
     <main class="main">
       <section class="panel">
         <h2>仪表盘</h2>
-        <form method="get" action="/admin/dashboard" class="filter-grid" style="margin-bottom:10px;">
+        <form method="get" action="<%= adminBase %>/dashboard" class="filter-grid" style="margin-bottom:10px;">
           <div>
             <label>统计周期</label>
             <select name="period" id="periodSelect">

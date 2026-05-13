@@ -15,6 +15,8 @@ import {
   getSiteById,
   getTrafficStats,
   listCountryDictionary,
+  listBlockedProducts,
+  listItemsByMerchant,
   listItemsBySite,
   listUnknownCountryHints,
   listPublicItems,
@@ -25,6 +27,7 @@ import {
   toggleSiteAuto,
   updateCountryDictionaryRule,
   updateSettings,
+  replaceBlockedProductsForSite,
   updateSite,
   updateUserCredentials
 } from './db.js';
@@ -39,6 +42,31 @@ app.set('view engine', 'ejs');
 app.set('views', 'src/views');
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json({ limit: '100kb' }));
+
+app.use((req, _res, next) => {
+  const settings = getSettings();
+  const adminPath = `/${settings.admin_path}`;
+  if (req.url === `${adminPath}/login`) {
+    req.url = '/login';
+  } else if (req.url === adminPath || req.url.startsWith(`${adminPath}/`)) {
+    req.url = req.url.replace(adminPath, '/admin');
+  }
+  next();
+});
+
+app.use((req, res, next) => {
+  const settings = getSettings();
+  const rawPath = String(req.originalUrl || req.url || '').split('?')[0];
+  if (settings.admin_path !== 'admin') {
+    if (rawPath === '/admin' || rawPath.startsWith('/admin/')) {
+      return res.status(404).send('Not Found');
+    }
+    if (rawPath === '/login' || rawPath === '/logout') {
+      return res.status(404).send('Not Found');
+    }
+  }
+  return next();
+});
 app.use(
   session({
     secret: process.env.SESSION_SECRET || 'change-me-secret',
@@ -49,28 +77,42 @@ app.use(
 
 function authRequired(req, res, next) {
   if (!req.session.user) {
-    return res.redirect('/login');
+    const settings = getSettings();
+    return res.redirect(`/${settings.admin_path}/login`);
   }
   return next();
 }
 
+function adminBasePath() {
+  return `/${getSettings().admin_path}`;
+}
+
+function redirectAdmin(res, suffix = '') {
+  const base = adminBasePath();
+  const s = suffix ? `/${String(suffix).replace(/^\/+/, '')}` : '';
+  return res.redirect(`${base}${s}`);
+}
+
 app.get('/login', (req, res) => {
-  res.render('login', { error: '' });
+  const settings = getSettings();
+  res.render('login', { error: '', adminBase: `/${settings.admin_path}` });
 });
 
 app.post('/login', (req, res) => {
   const { username, password } = req.body;
   const user = findUser(username, password);
   if (!user) {
-    return res.render('login', { error: 'Invalid username or password' });
+    const settings = getSettings();
+    return res.render('login', { error: 'Invalid username or password', adminBase: `/${settings.admin_path}` });
   }
   req.session.user = { id: user.id, username: user.username };
-  return res.redirect('/admin');
+  return redirectAdmin(res);
 });
 
 app.get('/logout', (req, res) => {
   req.session.destroy(() => {
-    res.redirect('/login');
+    const settings = getSettings();
+    res.redirect(`/${settings.admin_path}/login`);
   });
 });
 
@@ -179,7 +221,7 @@ app.post('/track-click', (req, res) => {
 });
 
 app.get('/admin', authRequired, (req, res) => {
-  return res.redirect('/admin/dashboard');
+  return redirectAdmin(res, 'dashboard');
 });
 
 app.get('/admin/dashboard', authRequired, (req, res) => {
@@ -189,12 +231,14 @@ app.get('/admin/dashboard', authRequired, (req, res) => {
   const stats = getDashboardStats();
   const events = listRecentEvents(20);
   const traffic = getTrafficStats({ period, startDate, endDate });
-  return res.render('admin-dashboard', { user: req.session.user, stats, events, traffic, filters: { period, startDate, endDate } });
+  const settings = getSettings();
+  return res.render('admin-dashboard', { user: req.session.user, adminBase: `/${settings.admin_path}`, stats, events, traffic, filters: { period, startDate, endDate } });
 });
 
 app.get('/admin/profile', authRequired, (req, res) => {
   return res.render('admin-profile', {
     user: req.session.user,
+    adminBase: `/${getSettings().admin_path}`,
     accountError: '',
     accountSuccess: '',
     settings: getSettings(),
@@ -204,12 +248,41 @@ app.get('/admin/profile', authRequired, (req, res) => {
 
 app.get('/admin/sites', authRequired, (req, res) => {
   const sites = listSites();
-  return res.render('admin-sites', { user: req.session.user, sites });
+  return res.render('admin-sites', { user: req.session.user, adminBase: `/${getSettings().admin_path}`, sites });
+});
+
+app.get('/admin/blocked-products', authRequired, (req, res) => {
+  const sites = listSites();
+  const selectedSiteId = Number(req.query.siteId || 0);
+  const selectedSite = selectedSiteId ? sites.find((s) => s.id === selectedSiteId) : null;
+  const items = selectedSite ? listItemsByMerchant(selectedSiteId) : [];
+  const blocked = listBlockedProducts().filter((b) => Number(b.site_id) === selectedSiteId);
+  const blockedSet = new Set(blocked.map((b) => String(b.title || '').trim()));
+  return res.render('admin-blocked-products', {
+    user: req.session.user,
+    adminBase: `/${getSettings().admin_path}`,
+    sites,
+    selectedSiteId,
+    items,
+    blockedSet
+  });
+});
+
+app.post('/admin/blocked-products', authRequired, (req, res) => {
+  const siteId = Number(req.body.siteId || 0);
+  const titles = req.body.blockedTitles
+    ? Array.isArray(req.body.blockedTitles)
+      ? req.body.blockedTitles
+      : [req.body.blockedTitles]
+    : [];
+  replaceBlockedProductsForSite(siteId, titles);
+  return res.redirect(`/${getSettings().admin_path}/blocked-products?siteId=${siteId}`);
 });
 
 app.get('/admin/countries', authRequired, (req, res) => {
   return res.render('admin-countries', {
     user: req.session.user,
+    adminBase: `/${getSettings().admin_path}`,
     countryRules: listCountryDictionary(),
     unknownHints: listUnknownCountryHints().slice(0, 80)
   });
@@ -217,7 +290,7 @@ app.get('/admin/countries', authRequired, (req, res) => {
 
 app.get('/admin/events', authRequired, (req, res) => {
   const events = listRecentEvents(120);
-  return res.render('admin-events', { user: req.session.user, events });
+  return res.render('admin-events', { user: req.session.user, adminBase: `/${getSettings().admin_path}`, events });
 });
 
 app.post('/admin/country-rules', authRequired, (req, res) => {
@@ -226,51 +299,54 @@ app.post('/admin/country-rules', authRequired, (req, res) => {
   if (result.ok) {
     consumeUnknownCountryHint(String(keyword || ''));
   }
-  return res.redirect('/admin/countries');
+  return redirectAdmin(res, 'countries');
 });
 
 app.post('/admin/country-rules/:id/edit', authRequired, (req, res) => {
   const id = Number(req.params.id);
   const { country, keyword } = req.body;
   updateCountryDictionaryRule(id, country, keyword);
-  return res.redirect('/admin/countries');
+  return redirectAdmin(res, 'countries');
 });
 
 app.post('/admin/country-rules/:id/delete', authRequired, (req, res) => {
   const id = Number(req.params.id);
   deleteCountryDictionaryRule(id);
-  return res.redirect('/admin/countries');
+  return redirectAdmin(res, 'countries');
 });
 
 app.post('/admin/account', authRequired, (req, res) => {
   const { username, password } = req.body;
   if (!username || String(username).trim().length < 3) {
-    return res.render('admin-profile', { user: req.session.user, accountError: '用户名至少3位', accountSuccess: '', settings: getSettings(), settingsSuccess: '' });
+    return res.render('admin-profile', { user: req.session.user, adminBase: `/${getSettings().admin_path}`, accountError: '用户名至少3位', accountSuccess: '', settings: getSettings(), settingsSuccess: '' });
   }
 
   const result = updateUserCredentials(req.session.user.id, String(username).trim(), String(password || '').trim());
   if (!result.ok) {
-    return res.render('admin-profile', { user: req.session.user, accountError: result.message, accountSuccess: '', settings: getSettings(), settingsSuccess: '' });
+    return res.render('admin-profile', { user: req.session.user, adminBase: `/${getSettings().admin_path}`, accountError: result.message, accountSuccess: '', settings: getSettings(), settingsSuccess: '' });
   }
 
   req.session.user.username = result.user.username;
-  return res.render('admin-profile', { user: req.session.user, accountError: '', accountSuccess: '账号信息更新成功', settings: getSettings(), settingsSuccess: '' });
+  return res.render('admin-profile', { user: req.session.user, adminBase: `/${getSettings().admin_path}`, accountError: '', accountSuccess: '账号信息更新成功', settings: getSettings(), settingsSuccess: '' });
 });
 
 app.post('/admin/settings', authRequired, (req, res) => {
-  const { publicTitle, publicBackgroundImage, telegramBotToken, telegramChatId } = req.body;
+  const { publicTitle, publicBackgroundImage, telegramBotToken, telegramChatId, adminPath } = req.body;
   updateSettings({
     public_title: publicTitle,
     public_background_image: publicBackgroundImage,
     telegram_bot_token: telegramBotToken,
-    telegram_chat_id: telegramChatId
+    telegram_chat_id: telegramChatId,
+    admin_path: adminPath
   });
+  const latest = getSettings();
   return res.render('admin-profile', {
     user: req.session.user,
+    adminBase: `/${latest.admin_path}`,
     accountError: '',
     accountSuccess: '',
-    settings: getSettings(),
-    settingsSuccess: '系统设置更新成功'
+    settings: latest,
+    settingsSuccess: `系统设置更新成功，新的后台地址：/${latest.admin_path}`
   });
 });
 
@@ -289,7 +365,7 @@ app.post('/admin/sites', authRequired, (req, res) => {
     fetch_mode: fetchMode || 'http',
     cf_wait_ms: Number(cfWaitMs || 7000)
   });
-  return res.redirect('/admin/sites');
+  return redirectAdmin(res, 'sites');
 });
 
 app.post('/admin/sites/:id/edit', authRequired, (req, res) => {
@@ -308,7 +384,7 @@ app.post('/admin/sites/:id/edit', authRequired, (req, res) => {
     fetch_mode: fetchMode || 'http',
     cf_wait_ms: Number(cfWaitMs || 7000)
   });
-  return res.redirect('/admin/sites');
+  return redirectAdmin(res, 'sites');
 });
 
 app.get('/admin/sites/:id/edit', authRequired, (req, res) => {
@@ -317,31 +393,31 @@ app.get('/admin/sites/:id/edit', authRequired, (req, res) => {
   if (!site) {
     return res.status(404).send('Site not found');
   }
-  return res.render('edit-site', { site });
+  return res.render('edit-site', { site, adminBase: `/${getSettings().admin_path}` });
 });
 
 app.post('/admin/sites/:id/toggle', authRequired, (req, res) => {
   const id = Number(req.params.id);
   toggleSite(id);
-  return res.redirect('/admin/sites');
+  return redirectAdmin(res, 'sites');
 });
 
 app.post('/admin/sites/:id/toggle-auto', authRequired, (req, res) => {
   const id = Number(req.params.id);
   toggleSiteAuto(id);
-  return res.redirect('/admin/sites');
+  return redirectAdmin(res, 'sites');
 });
 
 app.post('/admin/sites/:id/run-once', authRequired, async (req, res) => {
   const id = Number(req.params.id);
   await runMonitorOnce(id);
-  return res.redirect('/admin/sites');
+  return redirectAdmin(res, 'sites');
 });
 
 app.post('/admin/sites/:id/delete', authRequired, (req, res) => {
   const id = Number(req.params.id);
   deleteSite(id);
-  return res.redirect('/admin/sites');
+  return redirectAdmin(res, 'sites');
 });
 
 app.get('/admin/inventory/:siteId', authRequired, (req, res) => {
@@ -351,7 +427,7 @@ app.get('/admin/inventory/:siteId', authRequired, (req, res) => {
     return res.status(404).send('Site not found');
   }
   const items = listItemsBySite(siteId);
-  return res.render('inventory', { site, items });
+  return res.render('inventory', { site, items, adminBase: `/${getSettings().admin_path}` });
 });
 
 startMonitor();

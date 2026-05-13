@@ -15,11 +15,13 @@ function createDefault() {
     country_unknown_hints: [],
     click_events: [],
     view_events: [],
+    blocked_products: [],
     settings: {
       public_title: 'VPS库存监控前台',
       public_background_image: '',
       telegram_bot_token: '',
-      telegram_chat_id: ''
+      telegram_chat_id: '',
+      admin_path: 'admin'
     },
     monitor_sites: [],
     inventory_items: [],
@@ -198,8 +200,10 @@ export function listItemsBySite(siteId) {
 export function listPublicItems() {
   const db = readDb();
   const enabledSiteIds = new Set(db.monitor_sites.filter((s) => s.enabled === 1).map((s) => s.id));
+  const blockedSet = new Set((db.blocked_products || []).map((b) => `${Number(b.site_id)}::${String(b.title || '').trim()}`));
   return db.inventory_items
     .filter((i) => enabledSiteIds.has(i.site_id))
+    .filter((i) => !blockedSet.has(`${Number(i.site_id)}::${String(i.title || '').trim()}`))
     .map((i) => ({
       ...i,
       site_name: (db.monitor_sites.find((s) => s.id === i.site_id) || {}).name || '-'
@@ -218,6 +222,30 @@ export function getPublicItemById(id) {
   const site = db.monitor_sites.find((s) => s.id === item.site_id);
   if (!site || site.enabled !== 1) return null;
   return { ...item, site_name: site.name };
+}
+
+export function listBlockedProducts() {
+  const db = readDb();
+  return [...(db.blocked_products || [])].sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
+}
+
+export function listItemsByMerchant(siteId) {
+  const db = readDb();
+  const id = Number(siteId || 0);
+  if (!id) return [];
+  return db.inventory_items.filter((i) => i.site_id === id).sort((a, b) => b.id - a.id);
+}
+
+export function replaceBlockedProductsForSite(siteId, titles) {
+  const db = readDb();
+  const id = Number(siteId || 0);
+  if (!id) return;
+  const keep = (db.blocked_products || []).filter((b) => Number(b.site_id) !== id);
+  const uniqueTitles = [...new Set((titles || []).map((t) => String(t || '').trim()).filter(Boolean))];
+  let nextId = keep.reduce((m, x) => Math.max(m, Number(x.id || 0)), 0) + 1;
+  const add = uniqueTitles.map((title) => ({ id: nextId++, site_id: id, title, created_at: now() }));
+  db.blocked_products = [...keep, ...add];
+  writeDb(db);
 }
 
 export function addClickEvent(itemId, siteId) {
@@ -433,7 +461,8 @@ export function getSettings() {
     public_title: settings.public_title || 'VPS库存监控前台',
     public_background_image: settings.public_background_image || '',
     telegram_bot_token: settings.telegram_bot_token || '',
-    telegram_chat_id: settings.telegram_chat_id || ''
+    telegram_chat_id: settings.telegram_chat_id || '',
+    admin_path: String(settings.admin_path || 'admin').trim().replace(/^\/+|\/+$/g, '') || 'admin'
   };
 }
 
@@ -444,6 +473,7 @@ export function updateSettings(payload) {
   db.settings.public_background_image = String(payload.public_background_image || '').trim();
   db.settings.telegram_bot_token = String(payload.telegram_bot_token || '').trim();
   db.settings.telegram_chat_id = String(payload.telegram_chat_id || '').trim();
+  db.settings.admin_path = String(payload.admin_path || 'admin').trim().replace(/^\/+|\/+$/g, '') || 'admin';
   writeDb(db);
 }
 

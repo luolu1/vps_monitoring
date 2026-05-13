@@ -1,17 +1,18 @@
 <aside class="side">
   <p class="brand">VPS监控后台</p>
   <div class="muted">用户：<%= user.username %></div>
-  <div style="margin-top:8px;"><a class="btn" href="/">前台</a> <a class="btn" href="/logout">退出</a></div>
+  <div style="margin-top:8px;"><a class="btn" href="/">前台</a> <a class="btn" href="<%= adminBase %>/logout">退出</a></div>
   <nav class="nav" style="margin-top:8px;">
     <h4>概览</h4>
-    <a href="/admin/dashboard">仪表盘</a>
+    <a href="<%= adminBase %>/dashboard">仪表盘</a>
     <h4>系统设置</h4>
-    <a href="/admin/profile">系统设置</a>
+    <a href="<%= adminBase %>/profile">系统设置</a>
     <h4>监控站点</h4>
-    <a href="/admin/sites">站点管理</a>
+    <a href="<%= adminBase %>/sites">站点管理</a>
+    <a href="<%= adminBase %>/blocked-products">屏蔽商品</a>
     <h4>国家识别</h4>
-    <a href="/admin/countries">国家词典</a>
+    <a href="<%= adminBase %>/countries">国家词典</a>
     <h4>日志</h4>
-    <a href="/admin/events">最近事件</a>
+    <a href="<%= adminBase %>/events">最近事件</a>
   </nav>
 </aside>

@@ -31,7 +31,7 @@
   <div class="wrap">
     <div class="panel">
       <h2>编辑站点</h2>
-      <form method="post" action="/admin/sites/<%= site.id %>/edit">
+      <form method="post" action="<%= adminBase %>/sites/<%= site.id %>/edit">
         <div class="grid">
           <div>
             <label>站点名称</label>
@@ -80,7 +80,7 @@
         </div>
         <div style="margin-top:12px;">
           <button class="btn" type="submit">保存修改</button>
-          <a class="btn btn-alt" href="/admin">返回列表</a>
+          <a class="btn btn-alt" href="<%= adminBase %>/sites">返回列表</a>
         </div>
       </form>
     </div>
