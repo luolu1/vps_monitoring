@@ -10,5 +10,19 @@ services:
     environment:
       PORT: "3000"
       SESSION_SECRET: "change-me-in-production"
+      FLARESOLVERR_URL: "http://flaresolverr:8191/v1"
     volumes:
       - ./data.json:/app/data.json
+    depends_on:
+      - flaresolverr
+
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    environment:
+      - LOG_LEVEL=info
+      - LOG_HTML=false
+      - CAPTCHA_SOLVER=none
+    ports:
+      - "8191:8191"
+    restart: unless-stopped
