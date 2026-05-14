@@ -129,3 +129,4 @@ Project includes:
 - First run auto-creates `data.json` and default admin user.
 - `data.json` is runtime data. Back it up regularly.
 - For security, change default admin credentials immediately in **System Settings**.
+- Monitor now includes a site-level lock with stale-lock recovery to prevent overlapping sync runs for the same site (`skip_running` / `stale_lock_recovered` events).

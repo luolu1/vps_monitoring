@@ -12,6 +12,35 @@ import {
 import { buildAffLink, fetchInventoryWithMeta } from './scraper.js';
 import { sendTelegram } from './notify.js';
 
+// siteId -> lock start timestamp(ms)
+const siteRunLocks = new Map();
+
+function lockTtlMs(site) {
+  const intervalMin = Math.max(1, Number(site.check_interval_minutes || 5));
+  return Math.max(intervalMin * 3 * 60 * 1000, 15 * 60 * 1000);
+}
+
+function acquireSiteLock(site) {
+  const siteId = Number(site.id);
+  const now = Date.now();
+  const startedAt = Number(siteRunLocks.get(siteId) || 0);
+  if (!startedAt) {
+    siteRunLocks.set(siteId, now);
+    return { ok: true, staleRecovered: false };
+  }
+
+  const ttl = lockTtlMs(site);
+  if (now - startedAt > ttl) {
+    siteRunLocks.set(siteId, now);
+    return { ok: true, staleRecovered: true };
+  }
+  return { ok: false, staleRecovered: false };
+}
+
+function releaseSiteLock(site) {
+  siteRunLocks.delete(Number(site.id));
+}
+
 function parseTime(value) {
   if (!value) return null;
   const iso = String(value).replace(' ', 'T') + 'Z';
@@ -79,7 +108,15 @@ function learnUnknownCountry(item) {
 export async function runMonitorOnce(siteId = null) {
   const sites = listEnabledSites().filter((s) => (siteId ? s.id === Number(siteId) : true));
   for (const site of sites) {
+    const lock = acquireSiteLock(site);
+    if (!lock.ok) {
+      addEvent(site.id, 'site_skip', site.name, null, 0, 'skip_running');
+      continue;
+    }
     try {
+      if (lock.staleRecovered) {
+        addEvent(site.id, 'site_lock', site.name, null, 0, 'stale_lock_recovered');
+      }
       const result = await fetchInventoryWithMeta(site);
       const dict = listCountryDictionary();
       const items = (result.items || []).map((item) => applyCountryDictionary(item, dict));
@@ -111,6 +148,8 @@ export async function runMonitorOnce(siteId = null) {
       addEvent(site.id, 'site_error', site.name, null, 0, `error:${String(error.message || error)}`);
       const settings = getSettings();
       await sendTelegram(settings, `❌ 同步失败\n商家: ${site.name}\n错误: ${String(error.message || error)}`);
+    } finally {
+      releaseSiteLock(site);
     }
   }
 }
