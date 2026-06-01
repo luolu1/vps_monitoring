@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const DB_PATH = path.resolve('data.json');
+const APP_CONFIG_PATH = path.resolve('app.config.json');
 
 function now() {
   return new Date().toISOString().replace('T', ' ').slice(0, 19);
@@ -21,7 +22,10 @@ function createDefault() {
       public_background_image: '',
       telegram_bot_token: '',
       telegram_chat_id: '',
-      admin_path: 'admin'
+      admin_path: 'admin',
+      monitor_concurrency: 5,
+      monitor_idle_delay_ms: 3000,
+      monitor_site_timeout_ms: 0
     },
     monitor_sites: [],
     inventory_items: [],
@@ -58,6 +62,154 @@ function readDb() {
 
 function writeDb(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
+}
+
+function readAppConfig() {
+  if (!fs.existsSync(APP_CONFIG_PATH)) {
+    return null;
+  }
+  try {
+    const raw = fs.readFileSync(APP_CONFIG_PATH, 'utf8');
+    const cleaned = String(raw || '').replace(/^\uFEFF/, '').trim();
+    if (!cleaned) return null;
+    return JSON.parse(cleaned);
+  } catch (_e) {
+    return null;
+  }
+}
+
+export function getAppConfig() {
+  const cfg = readAppConfig() || {};
+  const serverCfg = cfg.server || {};
+  const adminCfg = cfg.admin || {};
+  const publicCfg = cfg.public || {};
+  const telegramCfg = cfg.telegram || {};
+  const monitorCfg = cfg.monitor || {};
+  const flaresolverrCfg = cfg.flaresolverr || {};
+
+  return {
+    server: {
+      host: String(serverCfg.host || '0.0.0.0').trim() || '0.0.0.0',
+      port: Number.isFinite(Number(serverCfg.port)) ? Math.max(1, Math.min(65535, Math.floor(Number(serverCfg.port)))) : 3000
+    },
+    admin: {
+      username: String(adminCfg.username || '').trim() || 'admin',
+      password: String(adminCfg.password || '').trim() || 'admin123',
+      path: String(adminCfg.path || 'admin').trim().replace(/^\/+|\/+$/g, '') || 'admin'
+    },
+    public: {
+      title: String(publicCfg.title || '').trim() || 'VPS库存监控前台',
+      backgroundImage: String(publicCfg.backgroundImage || '').trim()
+    },
+    telegram: {
+      botToken: String(telegramCfg.botToken || '').trim(),
+      chatId: String(telegramCfg.chatId || '').trim()
+    },
+    flaresolverr: {
+      url: String(flaresolverrCfg.url || '').trim() || 'http://127.0.0.1:8191/v1'
+    },
+    monitor: {
+      concurrency: Number.isFinite(Number(monitorCfg.concurrency)) ? Math.max(1, Math.min(30, Math.floor(Number(monitorCfg.concurrency)))) : 5,
+      idleDelayMs: Number.isFinite(Number(monitorCfg.idleDelayMs)) ? Math.max(1000, Math.min(60000, Math.floor(Number(monitorCfg.idleDelayMs)))) : 3000,
+      siteTimeoutMs: Number.isFinite(Number(monitorCfg.siteTimeoutMs)) ? Math.max(0, Math.min(3600000, Math.floor(Number(monitorCfg.siteTimeoutMs)))) : 0
+    }
+  };
+}
+
+export function applyAppConfigOverrides() {
+  const cfg = readAppConfig();
+  if (!cfg || typeof cfg !== 'object') return { ok: false, applied: false };
+
+  const db = readDb();
+  db.settings = db.settings || {};
+  db.users = db.users || [];
+
+  const adminCfg = cfg.admin || {};
+  const publicCfg = cfg.public || {};
+  const telegramCfg = cfg.telegram || {};
+  const monitorCfg = cfg.monitor || {};
+
+  const nextUsername = String(adminCfg.username || '').trim();
+  const nextPassword = String(adminCfg.password || '').trim();
+  const nextAdminPath = String(adminCfg.path || '').trim().replace(/^\/+|\/+$/g, '');
+
+  let changed = false;
+  if (nextUsername) {
+    const adminUser = db.users.find((u) => Number(u.id) === 1) || db.users[0];
+    if (adminUser && adminUser.username !== nextUsername) {
+      adminUser.username = nextUsername;
+      changed = true;
+    }
+  }
+  if (nextPassword) {
+    const adminUser = db.users.find((u) => Number(u.id) === 1) || db.users[0];
+    if (adminUser && adminUser.password !== nextPassword) {
+      adminUser.password = nextPassword;
+      changed = true;
+    }
+  }
+  if (nextAdminPath && db.settings.admin_path !== nextAdminPath) {
+    db.settings.admin_path = nextAdminPath;
+    changed = true;
+  }
+
+  const publicTitle = String(publicCfg.title || '').trim();
+  const publicBackgroundImage = String(publicCfg.backgroundImage || '').trim();
+  if (publicTitle && db.settings.public_title !== publicTitle) {
+    db.settings.public_title = publicTitle;
+    changed = true;
+  }
+  if (publicBackgroundImage !== '' && db.settings.public_background_image !== publicBackgroundImage) {
+    db.settings.public_background_image = publicBackgroundImage;
+    changed = true;
+  }
+
+  const botToken = String(telegramCfg.botToken || '').trim();
+  const chatId = String(telegramCfg.chatId || '').trim();
+  if (botToken !== '' && db.settings.telegram_bot_token !== botToken) {
+    db.settings.telegram_bot_token = botToken;
+    changed = true;
+  }
+  if (chatId !== '' && db.settings.telegram_chat_id !== chatId) {
+    db.settings.telegram_chat_id = chatId;
+    changed = true;
+  }
+
+  if (typeof monitorCfg.concurrency !== 'undefined') {
+    const value = Number(monitorCfg.concurrency);
+    if (Number.isFinite(value)) {
+      const normalized = Math.max(1, Math.min(30, Math.floor(value)));
+      if (db.settings.monitor_concurrency !== normalized) {
+        db.settings.monitor_concurrency = normalized;
+        changed = true;
+      }
+    }
+  }
+  if (typeof monitorCfg.idleDelayMs !== 'undefined') {
+    const value = Number(monitorCfg.idleDelayMs);
+    if (Number.isFinite(value)) {
+      const normalized = Math.max(1000, Math.min(60000, Math.floor(value)));
+      if (db.settings.monitor_idle_delay_ms !== normalized) {
+        db.settings.monitor_idle_delay_ms = normalized;
+        changed = true;
+      }
+    }
+  }
+  if (typeof monitorCfg.siteTimeoutMs !== 'undefined') {
+    const value = Number(monitorCfg.siteTimeoutMs);
+    if (Number.isFinite(value)) {
+      const normalized = Math.max(0, Math.min(3600000, Math.floor(value)));
+      if (db.settings.monitor_site_timeout_ms !== normalized) {
+        db.settings.monitor_site_timeout_ms = normalized;
+        changed = true;
+      }
+    }
+  }
+
+  if (changed) {
+    writeDb(db);
+  }
+  return { ok: true, applied: true, changed };
 }
 
 function todayDate() {
@@ -103,7 +255,6 @@ export function listSites() {
     .map((s) => ({
       ...s,
       auto_enabled: typeof s.auto_enabled === 'number' ? s.auto_enabled : s.enabled,
-      check_interval_minutes: Number(s.check_interval_minutes || 5),
       request_timeout_ms: Number(s.request_timeout_ms || 20000),
       retry_count: Number(s.retry_count || 2),
       fetch_mode: s.fetch_mode || 'http',
@@ -122,7 +273,6 @@ export function addSite(payload) {
     parser_type: String(payload.parser_type || 'whmcs').toLowerCase(),
     enabled: payload.enabled ? 1 : 0,
     auto_enabled: payload.auto_enabled ? 1 : 0,
-    check_interval_minutes: Number(payload.check_interval_minutes || 5),
     request_timeout_ms: Number(payload.request_timeout_ms || 20000),
     retry_count: Number(payload.retry_count || 2),
     fetch_mode: payload.fetch_mode || 'http',
@@ -146,7 +296,6 @@ export function updateSite(id, payload) {
   site.parser_type = String(payload.parser_type || site.parser_type || 'whmcs').toLowerCase();
   site.enabled = payload.enabled ? 1 : 0;
   site.auto_enabled = payload.auto_enabled ? 1 : 0;
-  site.check_interval_minutes = Number(payload.check_interval_minutes || site.check_interval_minutes || 5);
   site.request_timeout_ms = Number(payload.request_timeout_ms || site.request_timeout_ms || 20000);
   site.retry_count = Number(payload.retry_count || site.retry_count || 2);
   site.fetch_mode = payload.fetch_mode || site.fetch_mode || 'http';
@@ -457,23 +606,35 @@ export function getDashboardStats() {
 export function getSettings() {
   const db = readDb();
   const settings = db.settings || {};
+  const monitorConcurrency = Number(settings.monitor_concurrency || 5);
+  const monitorIdleDelayMs = Number(settings.monitor_idle_delay_ms || 3000);
+  const monitorSiteTimeoutMs = Number(settings.monitor_site_timeout_ms || 0);
   return {
     public_title: settings.public_title || 'VPS库存监控前台',
     public_background_image: settings.public_background_image || '',
     telegram_bot_token: settings.telegram_bot_token || '',
     telegram_chat_id: settings.telegram_chat_id || '',
-    admin_path: String(settings.admin_path || 'admin').trim().replace(/^\/+|\/+$/g, '') || 'admin'
+    admin_path: String(settings.admin_path || 'admin').trim().replace(/^\/+|\/+$/g, '') || 'admin',
+    monitor_concurrency: Number.isFinite(monitorConcurrency) ? Math.max(1, Math.min(30, Math.floor(monitorConcurrency))) : 5,
+    monitor_idle_delay_ms: Number.isFinite(monitorIdleDelayMs) ? Math.max(1000, Math.min(60000, Math.floor(monitorIdleDelayMs))) : 3000,
+    monitor_site_timeout_ms: Number.isFinite(monitorSiteTimeoutMs) ? Math.max(0, Math.min(3600000, Math.floor(monitorSiteTimeoutMs))) : 0
   };
 }
 
 export function updateSettings(payload) {
   const db = readDb();
   db.settings = db.settings || {};
+  const monitorConcurrency = Number(payload.monitor_concurrency || 5);
+  const monitorIdleDelayMs = Number(payload.monitor_idle_delay_ms || 3000);
+  const monitorSiteTimeoutMs = Number(payload.monitor_site_timeout_ms || 0);
   db.settings.public_title = String(payload.public_title || '').trim() || 'VPS库存监控前台';
   db.settings.public_background_image = String(payload.public_background_image || '').trim();
   db.settings.telegram_bot_token = String(payload.telegram_bot_token || '').trim();
   db.settings.telegram_chat_id = String(payload.telegram_chat_id || '').trim();
   db.settings.admin_path = String(payload.admin_path || 'admin').trim().replace(/^\/+|\/+$/g, '') || 'admin';
+  db.settings.monitor_concurrency = Number.isFinite(monitorConcurrency) ? Math.max(1, Math.min(30, Math.floor(monitorConcurrency))) : 5;
+  db.settings.monitor_idle_delay_ms = Number.isFinite(monitorIdleDelayMs) ? Math.max(1000, Math.min(60000, Math.floor(monitorIdleDelayMs))) : 3000;
+  db.settings.monitor_site_timeout_ms = Number.isFinite(monitorSiteTimeoutMs) ? Math.max(0, Math.min(3600000, Math.floor(monitorSiteTimeoutMs))) : 0;
   writeDb(db);
 }
 

@@ -13,6 +13,7 @@ import {
   getPublicItemById,
   getSettings,
   getSiteById,
+  getAppConfig,
   getTrafficStats,
   listCountryDictionary,
   listBlockedProducts,
@@ -23,6 +24,7 @@ import {
   listRecentEvents,
   listSites,
   addViewEvent,
+  applyAppConfigOverrides,
   toggleSite,
   toggleSiteAuto,
   updateCountryDictionaryRule,
@@ -34,9 +36,12 @@ import {
 import { runMonitorOnce, startMonitor } from './monitor.js';
 
 dotenv.config();
+applyAppConfigOverrides();
 
 const app = express();
-const port = Number(process.env.PORT || 3000);
+const appConfig = getAppConfig();
+const host = process.env.HOST || appConfig.server.host || '0.0.0.0';
+const port = Number(process.env.PORT || appConfig.server.port || 3000);
 
 app.set('view engine', 'ejs');
 app.set('views', 'src/views');
@@ -331,13 +336,25 @@ app.post('/admin/account', authRequired, (req, res) => {
 });
 
 app.post('/admin/settings', authRequired, (req, res) => {
-  const { publicTitle, publicBackgroundImage, telegramBotToken, telegramChatId, adminPath } = req.body;
+  const {
+    publicTitle,
+    publicBackgroundImage,
+    telegramBotToken,
+    telegramChatId,
+    adminPath,
+    monitorConcurrency,
+    monitorIdleDelayMs,
+    monitorSiteTimeoutMs
+  } = req.body;
   updateSettings({
     public_title: publicTitle,
     public_background_image: publicBackgroundImage,
     telegram_bot_token: telegramBotToken,
     telegram_chat_id: telegramChatId,
-    admin_path: adminPath
+    admin_path: adminPath,
+    monitor_concurrency: monitorConcurrency,
+    monitor_idle_delay_ms: monitorIdleDelayMs,
+    monitor_site_timeout_ms: monitorSiteTimeoutMs
   });
   const latest = getSettings();
   return res.render('admin-profile', {
@@ -351,7 +368,7 @@ app.post('/admin/settings', authRequired, (req, res) => {
 });
 
 app.post('/admin/sites', authRequired, (req, res) => {
-  const { name, url, parserType, enabled, autoEnabled, checkIntervalMinutes, requestTimeoutMs, retryCount, fetchMode, cfWaitMs } = req.body;
+  const { name, url, parserType, enabled, autoEnabled, requestTimeoutMs, retryCount, fetchMode, cfWaitMs } = req.body;
   addSite({
     name,
     url,
@@ -359,7 +376,6 @@ app.post('/admin/sites', authRequired, (req, res) => {
     parser_type: parserType || 'whmcs',
     enabled: Boolean(enabled),
     auto_enabled: Boolean(autoEnabled),
-    check_interval_minutes: Number(checkIntervalMinutes || 5),
     request_timeout_ms: Number(requestTimeoutMs || 20000),
     retry_count: Number(retryCount || 2),
     fetch_mode: fetchMode || 'http',
@@ -370,7 +386,7 @@ app.post('/admin/sites', authRequired, (req, res) => {
 
 app.post('/admin/sites/:id/edit', authRequired, (req, res) => {
   const id = Number(req.params.id);
-  const { name, url, parserType, enabled, autoEnabled, checkIntervalMinutes, requestTimeoutMs, retryCount, fetchMode, cfWaitMs } = req.body;
+  const { name, url, parserType, enabled, autoEnabled, requestTimeoutMs, retryCount, fetchMode, cfWaitMs } = req.body;
   updateSite(id, {
     name,
     url,
@@ -378,7 +394,6 @@ app.post('/admin/sites/:id/edit', authRequired, (req, res) => {
     parser_type: parserType || 'whmcs',
     enabled: Boolean(enabled),
     auto_enabled: Boolean(autoEnabled),
-    check_interval_minutes: Number(checkIntervalMinutes || 5),
     request_timeout_ms: Number(requestTimeoutMs || 20000),
     retry_count: Number(retryCount || 2),
     fetch_mode: fetchMode || 'http',
@@ -432,6 +447,12 @@ app.get('/admin/inventory/:siteId', authRequired, (req, res) => {
 
 startMonitor();
 
-app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
+app.listen(port, host, () => {
+  if (host === '0.0.0.0') {
+    console.log(`Server listening on ${host}:${port}`);
+    console.log(`Local access: http://127.0.0.1:${port}`);
+  } else {
+    console.log(`Server listening on ${host}:${port}`);
+    console.log(`Access URL: http://${host}:${port}`);
+  }
 });

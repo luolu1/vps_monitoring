@@ -1,5 +1,6 @@
 node_modules/
 *.log
 .env
+app.config.json
 data.json.broken.*.bak
 .worktrees/

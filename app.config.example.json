@@ -1,0 +1,27 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 3000
+  },
+  "admin": {
+    "username": "admin",
+    "password": "change-this-password",
+    "path": "admin"
+  },
+  "public": {
+    "title": "VPS库存监控前台",
+    "backgroundImage": ""
+  },
+  "telegram": {
+    "botToken": "",
+    "chatId": ""
+  },
+  "flaresolverr": {
+    "url": "http://127.0.0.1:8191/v1"
+  },
+  "monitor": {
+    "concurrency": 5,
+    "idleDelayMs": 3000,
+    "siteTimeoutMs": 0
+  }
+}

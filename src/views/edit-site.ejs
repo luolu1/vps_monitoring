@@ -55,10 +55,6 @@
             <label><input type="checkbox" name="autoEnabled" <%= site.auto_enabled ? 'checked' : '' %> /> 启用自动检测</label>
           </div>
           <div>
-            <label>自动检测间隔（分钟）</label>
-            <input type="number" name="checkIntervalMinutes" min="1" value="<%= site.check_interval_minutes || 5 %>" required />
-          </div>
-          <div>
             <label>请求超时（毫秒）</label>
             <input type="number" name="requestTimeoutMs" min="3000" value="<%= site.request_timeout_ms || 20000 %>" required />
           </div>

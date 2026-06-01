@@ -1,5 +1,6 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
+import { getAppConfig } from './db.js';
 
 function normalizeText(value) {
   return (value || '').replace(/\s+/g, ' ').trim();
@@ -170,7 +171,8 @@ async function fetchHtml(url, options = {}) {
 
 async function fetchHtmlWithFlareSolverr(url, options = {}) {
   const timeoutMs = Number(options.timeoutMs || 30000);
-  const fsUrl = process.env.FLARESOLVERR_URL || 'http://flaresolverr:8191/v1';
+  const appConfig = getAppConfig();
+  const fsUrl = process.env.FLARESOLVERR_URL || appConfig.flaresolverr.url || 'http://127.0.0.1:8191/v1';
 
   try {
     const response = await axios.post(fsUrl, {
