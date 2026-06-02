@@ -34,7 +34,6 @@ function extractWhmcsConfig($, root) {
     }
   });
   const compact = lines.join('\n');
-  if (compact) return compact;
   const descHtml = root.find('.product-desc, .product-info, .description, .desc').first().html();
   if (descHtml) {
     const normalized = descHtml
@@ -45,8 +44,9 @@ function extractWhmcsConfig($, root) {
       .map((s) => normalizeText(s))
       .filter(Boolean)
       .join('\n');
-    if (normalized) return normalized;
+    if (normalized && normalized.length > compact.length) return normalized;
   }
+  if (compact) return compact;
   return normalizeText(root.find('.product-info, .description, .desc, p').text());
 }
 
