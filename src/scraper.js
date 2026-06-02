@@ -35,6 +35,18 @@ function extractWhmcsConfig($, root) {
   });
   const compact = lines.join('\n');
   if (compact) return compact;
+  const descHtml = root.find('.product-desc, .product-info, .description, .desc').first().html();
+  if (descHtml) {
+    const normalized = descHtml
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .split('\n')
+      .map((s) => normalizeText(s))
+      .filter(Boolean)
+      .join('\n');
+    if (normalized) return normalized;
+  }
   return normalizeText(root.find('.product-info, .description, .desc, p').text());
 }
 
