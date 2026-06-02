@@ -8,12 +8,13 @@ services:
     ports:
       - "3000:3000"
     environment:
+      DB_PATH: "/app/data"
       HOST: "0.0.0.0"
       PORT: "3000"
       SESSION_SECRET: "change-me-in-production"
       FLARESOLVERR_URL: "http://flaresolverr:8191/v1"
     volumes:
-      - ./data.json:/app/data.json
+      - ./data:/app/data
       - ./app.config.json:/app/app.config.json:ro
     depends_on:
       - flaresolverr

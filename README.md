@@ -22,7 +22,7 @@ Requirements:
 - `app.config.example.json`: config template for GitHub / new deployments
 - `app.config.json`: real local config file, not committed to Git
 - `data.example.json`: runtime data template for GitHub / new deployments
-- `data.json`: real runtime data file, not committed to Git
+- `data/data.json`: real runtime data file in Docker deployments, not committed to Git
 
 ## Configuration
 
@@ -30,6 +30,8 @@ Requirements:
 
 ```bash
 cp app.config.example.json app.config.json
+mkdir -p data
+cp data.example.json data/data.json
 ```
 
 2. Edit `app.config.json`.
@@ -109,15 +111,15 @@ Open:
 
 Notes:
 
-- `docker-compose.yml` mounts `app.config.json` into the app container
+- `docker-compose.yml` mounts `app.config.json` and `./data` into the app container
 - Compose also starts `flaresolverr`
 - Inside Docker Compose, `flaresolverr.url` should use `http://flaresolverr:8191/v1`
 
 ## Data Persistence
 
-- `data.json` stores runtime data
-- Back up `data.json` regularly
-- If you migrate servers, keep both `app.config.json` and `data.json`
+- `data/data.json` stores runtime data in Docker deployments
+- Back up the whole `data/` directory regularly
+- If you migrate servers, keep both `app.config.json` and `data/`
 
 ## GitHub Hosting Notes
 
@@ -126,9 +128,9 @@ If you plan to host this project on GitHub:
 - Commit `app.config.example.json`
 - Commit `data.example.json`
 - Do not commit `app.config.json`
-- Do not commit `data.json`
+- Do not commit `data/`
 - Do not commit real admin credentials, Telegram tokens, or private URLs
-- `app.config.json` and `data.json` are already ignored by `.gitignore`
+- `app.config.json` is already ignored by `.gitignore`
 - Before pushing, review `git status` and make sure no secrets are staged
 
 Recommended repository contents:
@@ -177,3 +179,17 @@ Port already in use:
 Config changed but not applied:
 
 - restart the app container: `docker compose restart vps-monitor`
+
+`Error: EISDIR: illegal operation on a directory, open '/app/data.json'`
+
+- this means the old deployment mounted `./data.json` as a directory
+- switch to the current compose file that mounts `./data:/app/data`
+- then run:
+
+```bash
+docker compose down
+rm -rf data.json
+mkdir -p data
+cp data.example.json data/data.json
+docker compose up -d --build
+```

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const DB_PATH = path.resolve('data.json');
+const DB_PATH_INPUT = process.env.DB_PATH || 'data.json';
 const APP_CONFIG_PATH = path.resolve('app.config.json');
 
 function now() {
@@ -33,35 +33,59 @@ function createDefault() {
   };
 }
 
+function resolveDbPath() {
+  const targetPath = path.resolve(DB_PATH_INPUT);
+  try {
+    if (fs.existsSync(targetPath) && fs.statSync(targetPath).isDirectory()) {
+      return path.join(targetPath, 'data.json');
+    }
+  } catch (_e) {
+  }
+  return targetPath;
+}
+
+function ensureDbParentDir(filePath) {
+  const dirPath = path.dirname(filePath);
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+  }
+}
+
 function readDb() {
-  if (!fs.existsSync(DB_PATH)) {
+  const dbPath = resolveDbPath();
+  if (!fs.existsSync(dbPath)) {
     const init = createDefault();
-    fs.writeFileSync(DB_PATH, JSON.stringify(init, null, 2), 'utf8');
+    ensureDbParentDir(dbPath);
+    fs.writeFileSync(dbPath, JSON.stringify(init, null, 2), 'utf8');
     return init;
   }
   try {
-    const raw = fs.readFileSync(DB_PATH, 'utf8');
+    const raw = fs.readFileSync(dbPath, 'utf8');
     const cleaned = String(raw || '').replace(/^\uFEFF/, '').trim();
     if (!cleaned) {
       const init = createDefault();
-      fs.writeFileSync(DB_PATH, JSON.stringify(init, null, 2), 'utf8');
+      ensureDbParentDir(dbPath);
+      fs.writeFileSync(dbPath, JSON.stringify(init, null, 2), 'utf8');
       return init;
     }
     return JSON.parse(cleaned);
   } catch (_e) {
-    const backupPath = `${DB_PATH}.broken.${Date.now()}.bak`;
+    const backupPath = `${dbPath}.broken.${Date.now()}.bak`;
     try {
-      fs.copyFileSync(DB_PATH, backupPath);
+      fs.copyFileSync(dbPath, backupPath);
     } catch (_ignore) {
     }
     const init = createDefault();
-    fs.writeFileSync(DB_PATH, JSON.stringify(init, null, 2), 'utf8');
+    ensureDbParentDir(dbPath);
+    fs.writeFileSync(dbPath, JSON.stringify(init, null, 2), 'utf8');
     return init;
   }
 }
 
 function writeDb(data) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
+  const dbPath = resolveDbPath();
+  ensureDbParentDir(dbPath);
+  fs.writeFileSync(dbPath, JSON.stringify(data, null, 2), 'utf8');
 }
 
 function readAppConfig() {

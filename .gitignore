@@ -3,5 +3,6 @@ node_modules/
 .env
 app.config.json
 data.json
+data/
 data.json.broken.*.bak
 .worktrees/
