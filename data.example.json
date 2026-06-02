@@ -1,0 +1,34 @@
+{
+  "counters": {
+    "users": 1,
+    "sites": 1,
+    "items": 1,
+    "events": 1
+  },
+  "users": [
+    {
+      "id": 1,
+      "username": "admin",
+      "password": "admin123",
+      "created_at": "2026-01-01 00:00:00"
+    }
+  ],
+  "country_dictionary": [],
+  "country_unknown_hints": [],
+  "click_events": [],
+  "view_events": [],
+  "blocked_products": [],
+  "settings": {
+    "public_title": "VPS库存监控前台",
+    "public_background_image": "",
+    "telegram_bot_token": "",
+    "telegram_chat_id": "",
+    "admin_path": "admin",
+    "monitor_concurrency": 5,
+    "monitor_idle_delay_ms": 3000,
+    "monitor_site_timeout_ms": 0
+  },
+  "monitor_sites": [],
+  "inventory_items": [],
+  "inventory_events": []
+}

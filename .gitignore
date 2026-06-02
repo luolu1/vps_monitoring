@@ -2,5 +2,6 @@ node_modules/
 *.log
 .env
 app.config.json
+data.json
 data.json.broken.*.bak
 .worktrees/

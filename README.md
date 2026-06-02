@@ -21,7 +21,8 @@ Requirements:
 - `docker-compose.yml`: deployment entrypoint
 - `app.config.example.json`: config template for GitHub / new deployments
 - `app.config.json`: real local config file, not committed to Git
-- `data.json`: runtime data file
+- `data.example.json`: runtime data template for GitHub / new deployments
+- `data.json`: real runtime data file, not committed to Git
 
 ## Configuration
 
@@ -123,9 +124,11 @@ Notes:
 If you plan to host this project on GitHub:
 
 - Commit `app.config.example.json`
+- Commit `data.example.json`
 - Do not commit `app.config.json`
+- Do not commit `data.json`
 - Do not commit real admin credentials, Telegram tokens, or private URLs
-- `app.config.json` is already ignored by `.gitignore`
+- `app.config.json` and `data.json` are already ignored by `.gitignore`
 - Before pushing, review `git status` and make sure no secrets are staged
 
 Recommended repository contents:
@@ -134,6 +137,7 @@ Recommended repository contents:
 - `Dockerfile`
 - `docker-compose.yml`
 - `app.config.example.json`
+- `data.example.json`
 - `README.md`
 
 Do not rely on GitHub to store production secrets.
