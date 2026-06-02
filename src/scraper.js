@@ -89,7 +89,7 @@ function detectCountry(title, config) {
 function parseTechnovmProducts(html, pageUrl) {
   const $ = cheerio.load(html);
   const products = [];
-  $('.product, .product-item, .server-item, .package').each((_, el) => {
+  $('.product, .product-item, .server-item, .package, .tt-single-product').each((_, el) => {
     const root = $(el);
     const wrapperId = (root.attr('id') || '').trim();
     const orderBtnId = (root.find('a.btn-order-now').attr('id') || '').trim();
