@@ -3,9 +3,28 @@ import path from 'node:path';
 
 const DB_PATH_INPUT = process.env.DB_PATH || 'data.json';
 const APP_CONFIG_PATH = path.resolve('app.config.json');
+const SHANGHAI_OFFSET_HOURS = 8;
+const SHANGHAI_OFFSET_MS = SHANGHAI_OFFSET_HOURS * 60 * 60 * 1000;
+
+function toShanghaiParts(date) {
+  const shifted = new Date(date.getTime() + SHANGHAI_OFFSET_MS);
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+    hour: shifted.getUTCHours(),
+    minute: shifted.getUTCMinutes(),
+    second: shifted.getUTCSeconds()
+  };
+}
+
+function shanghaiMs(year, month, day, hour = 0, minute = 0, second = 0) {
+  return Date.UTC(year, month - 1, day, hour - SHANGHAI_OFFSET_HOURS, minute, second);
+}
 
 function now() {
-  return new Date().toISOString().replace('T', ' ').slice(0, 19);
+  const parts = toShanghaiParts(new Date());
+  return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')} ${String(parts.hour).padStart(2, '0')}:${String(parts.minute).padStart(2, '0')}:${String(parts.second).padStart(2, '0')}`;
 }
 
 function createDefault() {
@@ -237,7 +256,8 @@ export function applyAppConfigOverrides() {
 }
 
 function todayDate() {
-  return new Date().toISOString().slice(0, 10);
+  const parts = toShanghaiParts(new Date());
+  return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
 }
 
 function nextHintId(db) {
@@ -448,9 +468,9 @@ export function addViewEvent(pathname) {
 
 function toMs(ts) {
   if (!ts) return 0;
-  const iso = String(ts).replace(' ', 'T') + 'Z';
-  const ms = Date.parse(iso);
-  return Number.isNaN(ms) ? 0 : ms;
+  const m = String(ts).trim().match(/^(\d{4})-(\d{2})-(\d{2})(?:\s+(\d{2}):(\d{2}):(\d{2}))?$/);
+  if (!m) return 0;
+  return shanghaiMs(Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4] || 0), Number(m[5] || 0), Number(m[6] || 0));
 }
 
 function countInHours(events, hours) {
@@ -463,11 +483,13 @@ function countInHours(events, hours) {
 }
 
 function formatDateLocal(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const parts = toShanghaiParts(d);
+  return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
 }
 
 function startOfDay(d) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+  const parts = toShanghaiParts(d);
+  return new Date(shanghaiMs(parts.year, parts.month, parts.day, 0, 0, 0));
 }
 
 function parseDateInput(text) {
@@ -475,7 +497,7 @@ function parseDateInput(text) {
   if (!s) return null;
   const m = s.match(/^(\d{4})[\/-](\d{2})[\/-](\d{2})$/);
   if (!m) return null;
-  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0, 0);
+  return new Date(shanghaiMs(Number(m[1]), Number(m[2]), Number(m[3]), 0, 0, 0));
 }
 
 function aggregateByHour(events, baseDate) {
@@ -485,13 +507,14 @@ function aggregateByHour(events, baseDate) {
   events.forEach((e) => {
     const ms = toMs(e.created_at);
     if (!ms) return;
-    const d = new Date(ms);
+    const d = toShanghaiParts(new Date(ms));
+    const startParts = toShanghaiParts(start);
     if (
-      d.getFullYear() === start.getFullYear() &&
-      d.getMonth() === start.getMonth() &&
-      d.getDate() === start.getDate()
+      d.year === startParts.year &&
+      d.month === startParts.month &&
+      d.day === startParts.day
     ) {
-      values[d.getHours()] += 1;
+      values[d.hour] += 1;
     }
   });
   return { labels, values };
@@ -532,16 +555,14 @@ export function getTrafficStats(options = {}) {
   const today = todayDate();
   clickEvents.forEach((e) => {
     if (e.date !== today) return;
-    const d = new Date(String(e.created_at).replace(' ', 'T'));
-    const hour = d.getHours();
+    const hour = toShanghaiParts(new Date(toMs(e.created_at))).hour;
     if (hour >= 0 && hour <= 23) {
       clickHourly[hour] += 1;
     }
   });
   viewEvents.forEach((e) => {
     if (e.date !== today) return;
-    const d = new Date(String(e.created_at).replace(' ', 'T'));
-    const hour = d.getHours();
+    const hour = toShanghaiParts(new Date(toMs(e.created_at))).hour;
     if (hour >= 0 && hour <= 23) {
       viewHourly[hour] += 1;
     }
