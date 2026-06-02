@@ -33,11 +33,28 @@ function extractWhmcsConfig($, root) {
       lines.push(full);
     }
   });
+  root.find('.product-desc-item').each((_, el) => {
+    const text = normalizeText($(el).text());
+    if (text) lines.push(text);
+  });
+  root.find('.products-desc-item').each((_, el) => {
+    const item = $(el);
+    const title = normalizeText(item.find('.desc-item-title').first().text());
+    const value = normalizeText(item.find('.desc-item-value').first().text());
+    const full = normalizeText(item.text());
+    if (title && value) {
+      lines.push(`${title}: ${value}`);
+    } else if (full) {
+      lines.push(full);
+    }
+  });
   const compact = lines.join('\n');
   const descHtml = root.find('.product-desc, .product-info, .description, .desc').first().html();
   if (descHtml) {
     const normalized = descHtml
       .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/div>/gi, '\n')
+      .replace(/<\/li>/gi, '\n')
       .replace(/<\/p>/gi, '\n')
       .replace(/<[^>]+>/g, '')
       .split('\n')
@@ -101,17 +118,17 @@ function detectCountry(title, config) {
 function parseTechnovmProducts(html, pageUrl) {
   const $ = cheerio.load(html);
   const products = [];
-  $('.product, .product-item, .server-item, .package, .tt-single-product').each((_, el) => {
+  $('.product, .product-item, .server-item, .package, .tt-single-product, .cart-products-item').each((_, el) => {
     const root = $(el);
-    const wrapperId = (root.attr('id') || '').trim();
+    const wrapperId = (root.attr('id') || root.find('[pid]').first().attr('pid') || '').trim();
     const orderBtnId = (root.find('a.btn-order-now').attr('id') || '').trim();
-    const title = normalizeText(root.find('h2, h3, .title, .product-title, header span, [id$="-name"]').first().text());
-    const price = normalizeText(root.find('.price, .product-price').first().text());
+    const title = normalizeText(root.find('h2, h3, h4, .title, .product-title, .product-name, .cart-products-title, header span, [id$="-name"]').first().text());
+    const price = normalizeText(root.find('.price, .product-price, .product-pricing, .cart-products-price').first().text());
     const billingPeriod = extractBillingPeriod(root);
     const config = extractWhmcsConfig($, root);
     const country = detectCountry(title, config);
     const stockText = normalizeText(root.text()).toLowerCase();
-    const qtyText = normalizeText(root.find('.qty').first().text());
+    const qtyText = normalizeText(root.find('.qty, .cart-products-qty').first().text());
     const qtyMatch = qtyText.match(/(\d+)/);
     const qty = qtyMatch ? Number(qtyMatch[1]) : null;
 
@@ -119,11 +136,14 @@ function parseTechnovmProducts(html, pageUrl) {
 
     let inStock = 1;
     if (qty !== null) inStock = qty > 0 ? 1 : 0;
-    if (stockText.includes('out of stock') || stockText.includes('sold out') || stockText.includes('unavailable') || stockText.includes('缺货') || stockText.includes('无货') || stockText.includes('售罄') || stockText.includes('0 可用')) {
+    if (root.find('.none-stock').length > 0 || stockText.includes('out of stock') || stockText.includes('sold out') || stockText.includes('unavailable') || stockText.includes('缺货') || stockText.includes('无货') || stockText.includes('售罄') || stockText.includes('0 可用')) {
       inStock = 0;
     }
 
-    const href = toAbsoluteUrl(pageUrl, root.find('a.btn-order-now, a[href*="/store/"], a[href*="pid="]').first().attr('href') || '');
+    const hrefFromAnchor = root.find('a.btn-order-now, a[href*="/store/"], a[href*="pid="], a[href*="cart.php"]').first().attr('href') || '';
+    const onclick = root.find('button[onclick]').first().attr('onclick') || '';
+    const hrefFromOnclick = (onclick.match(/window\.location\.href\s*=\s*['\"]([^'\"]+)['\"]/i) || [])[1] || '';
+    const href = toAbsoluteUrl(pageUrl, hrefFromAnchor || hrefFromOnclick);
     let pid = null;
     try {
       const u = new URL(href);
@@ -131,10 +151,17 @@ function parseTechnovmProducts(html, pageUrl) {
       if (pidFromQuery && /^\d+$/.test(pidFromQuery)) pid = Number(pidFromQuery);
     } catch (_e) { }
     if (!pid) {
-      const pidMatch = wrapperId.match(/^product(\d+)$/i) || orderBtnId.match(/^product(\d+)-order-button$/i);
+      const pidFromAttr = root.find('[pid]').first().attr('pid');
+      if (pidFromAttr && /^\d+$/.test(pidFromAttr)) {
+        pid = Number(pidFromAttr);
+      }
+    }
+    if (!pid) {
+      const pidMatch = wrapperId.match(/^product(\d+)$/i) || wrapperId.match(/^(\d+)$/) || orderBtnId.match(/^product(\d+)-order-button$/i);
       pid = pidMatch ? Number(pidMatch[1]) : null;
     }
-    products.push({ itemKey: String(pid || href || title), title, price, billingPeriod, country, config, inStock, href, pid, qty });
+    const finalHref = href || (pid ? toAbsoluteUrl(pageUrl, `/cart.php?a=add&pid=${pid}`) : '');
+    products.push({ itemKey: String(pid || finalHref || title), title, price, billingPeriod, country, config, inStock, href: finalHref, pid, qty });
   });
   return products;
 }
@@ -148,6 +175,14 @@ function parseTechnovmStoreLinks(html, pageUrl) {
     const href = toAbsoluteUrl(pageUrl, raw);
     if (!href) return;
     if (/\/cart\.php\?gid=\d+/i.test(href) || /\/index\.php\?rp=\/store\//i.test(href) || /\/store\/[a-z0-9\-_%]+/i.test(href)) {
+      links.push(href);
+    }
+  });
+  $('a[href]').each((_, el) => {
+    const raw = ($(el).attr('href') || '').trim();
+    if (!raw) return;
+    const href = toAbsoluteUrl(pageUrl, raw);
+    if (/\/pages\/(cloud-instance|baremetal-instance)/i.test(href)) {
       links.push(href);
     }
   });
@@ -165,6 +200,94 @@ function parseGeneric(html) {
     products.push({ itemKey: href, title, price: '', inStock: 1, href });
   });
   return products;
+}
+
+function parseDmitCartProducts(html, pageUrl) {
+  const $ = cheerio.load(html);
+  const products = [];
+
+  $('.cart-products-item').each((_, el) => {
+    const root = $(el);
+    const box = root.find('.cart-products-box').first();
+    const title = normalizeText(root.find('.cart-products-title').first().text());
+    if (!title) return;
+
+    const pidText = String(box.attr('pid') || '').trim();
+    const pid = /^\d+$/.test(pidText) ? Number(pidText) : null;
+    const priceNum = normalizeText(root.find('.price-num').first().text());
+    const priceSuffix = normalizeText(root.find('.price-suffix').first().text()) || 'USD';
+    const pricePrefix = normalizeText(root.find('.price-prefix').first().text()) || '$';
+    const billingText = normalizeText(root.find('.billing-cycle-text').first().text());
+    const qtyText = normalizeText(root.find('.cart-products-qty').first().text());
+    const config = extractWhmcsConfig($, root);
+    const country = detectCountry(title, config);
+    const href = pid ? toAbsoluteUrl(pageUrl, `/cart.php?a=add&pid=${pid}`) : '';
+    const price = priceNum ? `${pricePrefix}${priceNum}${priceSuffix}` : normalizeText(root.find('.cart-products-price').first().text());
+    const inStock = /out of stock|sold out|unavailable/i.test(qtyText) || box.hasClass('none-stock') ? 0 : 1;
+    const billingPeriod = billingText.toLowerCase().includes('monthly') ? '/月'
+      : billingText.toLowerCase().includes('quarterly') ? '/季度'
+      : billingText.toLowerCase().includes('annually') || billingText.toLowerCase().includes('yearly') ? '/年'
+      : billingText.toLowerCase().includes('triennially') ? '/三年'
+      : billingText.toLowerCase().includes('biennially') ? '/两年'
+      : '';
+
+    products.push({
+      itemKey: String(pid || href || title),
+      title,
+      price,
+      billingPeriod,
+      country,
+      config,
+      inStock,
+      href,
+      pid,
+      qty: inStock ? null : 0
+    });
+  });
+
+  return products;
+}
+
+function isDmitOutOfStockPage(html) {
+  const text = normalizeText(String(html || '')).toLowerCase();
+  return text.includes('out of stock')
+    || text.includes('orders for it have been suspended until more stock is available');
+}
+
+async function verifyDmitInventory(fetchPage, pageUrl, items) {
+  const verified = new Array(items.length);
+  let index = 0;
+  const workerCount = Math.min(2, items.length);
+
+  const workers = Array.from({ length: workerCount }, () => (async () => {
+    while (true) {
+      const currentIndex = index;
+      index += 1;
+      if (currentIndex >= items.length) break;
+
+      const item = items[currentIndex];
+      if (!item || !item.href || !/\/cart\.php\?a=add&pid=\d+/i.test(item.href)) {
+        verified[currentIndex] = item;
+        continue;
+      }
+
+      try {
+        const html = await fetchPage(toAbsoluteUrl(pageUrl, item.href));
+        verified[currentIndex] = {
+          ...item,
+          inStock: isDmitOutOfStockPage(html) ? 0 : 1
+        };
+      } catch (_e) {
+        verified[currentIndex] = {
+          ...item,
+          inStock: 0
+        };
+      }
+    }
+  })());
+
+  await Promise.all(workers);
+  return verified;
 }
 
 async function fetchHtml(url, options = {}) {
@@ -212,6 +335,14 @@ export async function fetchInventory(site) {
   };
   
   const useBrowser = String(site.fetch_mode || 'http') === 'browser';
+  const siteUrl = String(site.url || '');
+  const isDmitSite = /(^|\.)dmit\.io$/i.test((() => {
+    try {
+      return new URL(siteUrl).hostname;
+    } catch (_e) {
+      return '';
+    }
+  })());
   
   const fetchMain = async (url) => {
     let lastError = null;
@@ -226,8 +357,21 @@ export async function fetchInventory(site) {
     throw lastError;
   };
 
+  const fetchVerificationPage = async (url) => {
+    const verifyOptions = {
+      timeoutMs: Math.min(Number(fetchOptions.timeoutMs || 30000), 15000),
+      retryCount: 0
+    };
+    return useBrowser ? await fetchHtmlWithFlareSolverr(url, verifyOptions) : await fetchHtml(url, verifyOptions);
+  };
+
   const html = await fetchMain(site.url);
   const parserType = (site.parser_type || 'whmcs').toLowerCase();
+
+  if (isDmitSite) {
+    const cartHtml = await fetchMain(toAbsoluteUrl(site.url, '/cart.php'));
+    return parseDmitCartProducts(cartHtml, site.url);
+  }
 
   if (parserType === 'technovm' || parserType === 'whmcs') {
     const directProducts = parseTechnovmProducts(html, site.url);
@@ -246,7 +390,7 @@ export async function fetchInventory(site) {
       } catch (_e) {}
     }
 
-    const storeLinks = [...new Set(discoveredStoreLinks)];
+    const storeLinks = [...new Set([...baseStoreUrls, ...discoveredStoreLinks])];
     const merged = [];
     const seen = new Set();
 
