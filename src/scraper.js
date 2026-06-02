@@ -48,6 +48,17 @@ function extractWhmcsConfig($, root) {
       lines.push(full);
     }
   });
+  root.find('ul.text-center li, ul.list-unstyled li').each((_, li) => {
+    const item = $(li);
+    const value = normalizeText(item.find('b, strong').first().text());
+    const full = normalizeText(item.text());
+    const label = normalizeText(full.replace(value, ''));
+    if (label && value) {
+      lines.push(`${label}: ${value}`);
+    } else if (full) {
+      lines.push(full);
+    }
+  });
   const compact = lines.join('\n');
   const descHtml = root.find('.product-desc, .product-info, .description, .desc').first().html();
   if (descHtml) {
@@ -118,12 +129,12 @@ function detectCountry(title, config) {
 function parseTechnovmProducts(html, pageUrl) {
   const $ = cheerio.load(html);
   const products = [];
-  $('.product, .product-item, .server-item, .package, .tt-single-product, .cart-products-item').each((_, el) => {
+  $('.product, .product-item, .server-item, .package, .tt-single-product, .cart-products-item, .card.card-body.align-items-center').each((_, el) => {
     const root = $(el);
     const wrapperId = (root.attr('id') || root.find('[pid]').first().attr('pid') || '').trim();
     const orderBtnId = (root.find('a.btn-order-now').attr('id') || '').trim();
     const title = normalizeText(root.find('h2, h3, h4, .title, .product-title, .product-name, .cart-products-title, header span, [id$="-name"]').first().text());
-    const price = normalizeText(root.find('.price, .product-price, .product-pricing, .cart-products-price').first().text());
+    const price = normalizeText(root.find('.price, .product-price, .product-pricing, .cart-products-price, .price-cls').first().text());
     const billingPeriod = extractBillingPeriod(root);
     const config = extractWhmcsConfig($, root);
     const country = detectCountry(title, config);
@@ -161,6 +172,9 @@ function parseTechnovmProducts(html, pageUrl) {
       pid = pidMatch ? Number(pidMatch[1]) : null;
     }
     const finalHref = href || (pid ? toAbsoluteUrl(pageUrl, `/cart.php?a=add&pid=${pid}`) : '');
+    if (!pid && !/\/store\//i.test(finalHref) && !/cart\.php\?a=add/i.test(finalHref)) {
+      return;
+    }
     products.push({ itemKey: String(pid || finalHref || title), title, price, billingPeriod, country, config, inStock, href: finalHref, pid, qty });
   });
   return products;
@@ -174,6 +188,14 @@ function parseTechnovmStoreLinks(html, pageUrl) {
     if (!raw) return;
     const href = toAbsoluteUrl(pageUrl, raw);
     if (!href) return;
+    if (/\/cart\.php\?gid=\d+/i.test(href) || /\/index\.php\?rp=\/store\//i.test(href) || /\/store\/[a-z0-9\-_%]+/i.test(href)) {
+      links.push(href);
+    }
+  });
+  $('a[href]').each((_, el) => {
+    const raw = ($(el).attr('href') || '').trim();
+    if (!raw) return;
+    const href = toAbsoluteUrl(pageUrl, raw);
     if (/\/cart\.php\?gid=\d+/i.test(href) || /\/index\.php\?rp=\/store\//i.test(href) || /\/store\/[a-z0-9\-_%]+/i.test(href)) {
       links.push(href);
     }
