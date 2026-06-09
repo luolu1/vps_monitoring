@@ -8,14 +8,14 @@ services:
     ports:
       - "3000:3000"
     environment:
-      DB_PATH: "/app/data"
+      DB_PATH: "/app/data/inventory.sqlite"
       HOST: "0.0.0.0"
       PORT: "3000"
       SESSION_SECRET: "change-me-in-production"
       FLARESOLVERR_URL: "http://flaresolverr:8191/v1"
     volumes:
       - ./data:/app/data
-      - ./app.config.json:/app/app.config.json:ro
+      - ./app.config.json:/app/app.config.json
     depends_on:
       - flaresolverr
 

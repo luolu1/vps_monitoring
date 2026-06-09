@@ -1,0 +1,10 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+data
+app.config.json
+inventory.sqlite
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

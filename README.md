@@ -5,6 +5,7 @@ WHMCS VPS inventory monitoring platform with:
 - Admin backend: dashboard, site management, country dictionary, blocked products
 - Public storefront: merchant grouping, filters, direct affiliate purchase
 - Click tracking, telemetry, Telegram notifications
+- Restock Telegram alerts when previously out-of-stock products come back
 - Continuous worker-pool auto sync with configurable concurrency
 
 ## Deployment
@@ -21,8 +22,7 @@ Requirements:
 - `docker-compose.yml`: deployment entrypoint
 - `app.config.example.json`: config template for GitHub / new deployments
 - `app.config.json`: real local config file, not committed to Git
-- `data.example.json`: runtime data template for GitHub / new deployments
-- `data/data.json`: real runtime data file in Docker deployments, not committed to Git
+- `data/inventory.sqlite`: runtime database file in Docker deployments
 
 ## Configuration
 
@@ -31,7 +31,6 @@ Requirements:
 ```bash
 cp app.config.example.json app.config.json
 mkdir -p data
-cp data.example.json data/data.json
 ```
 
 2. Edit `app.config.json`.
@@ -51,11 +50,12 @@ Example:
   },
   "public": {
     "title": "VPS库存监控前台",
-    "backgroundImage": ""
+    "backgroundImage": "",
+    "baseUrl": ""
   },
   "telegram": {
     "botToken": "",
-    "chatId": ""
+    "restockChatId": ""
   },
   "flaresolverr": {
     "url": "http://flaresolverr:8191/v1"
@@ -72,8 +72,8 @@ Main keys:
 
 - `server.host` / `server.port`
 - `admin.username` / `admin.password` / `admin.path`
-- `public.title` / `public.backgroundImage`
-- `telegram.botToken` / `telegram.chatId`
+- `public.title` / `public.backgroundImage` / `public.baseUrl`
+- `telegram.botToken` / `telegram.restockChatId`
 - `flaresolverr.url`
 - `monitor.concurrency` / `monitor.idleDelayMs` / `monitor.siteTimeoutMs`
 
@@ -114,19 +114,63 @@ Notes:
 - `docker-compose.yml` mounts `app.config.json` and `./data` into the app container
 - Compose also starts `flaresolverr`
 - Inside Docker Compose, `flaresolverr.url` should use `http://flaresolverr:8191/v1`
+- `public.baseUrl` is the externally accessible frontend address used in Telegram tag links
+- examples: `http://IP:3000`, `https://domain:3000`, `https://domain`
+- when using CDN or Cloudflare Tunnel, set `public.baseUrl` to the user-facing HTTPS domain
 
 ## Data Persistence
 
-- `data/data.json` stores runtime data in Docker deployments
+- `data/inventory.sqlite` stores all runtime application data
+- this includes users, settings, sites, country dictionary, unknown hints, inventory, events, clicks, views, and blocked products
 - Back up the whole `data/` directory regularly
 - If you migrate servers, keep both `app.config.json` and `data/`
+
+## SQLite Storage
+
+The app now uses SQLite as the single runtime data store:
+
+- users
+- system settings
+- monitored sites
+- country dictionary
+- unknown country hints
+- inventory snapshots
+- inventory events
+- click events
+- page view events
+- blocked products
+
+Default location in Docker Compose:
+
+- `data/inventory.sqlite`
+
+If you are upgrading from an old JSON-based deployment, the app can still import legacy `data/data.json` automatically on first start when the SQLite tables are empty.
+
+After migration, the app no longer reads or writes runtime state from `data/data.json`.
+
+## Restock Notifications
+
+If Telegram is configured, the monitor sends restock notifications to:
+
+- `telegram.restockChatId`: restock product notifications
+
+Restock messages can include clickable tag links pointing to the frontend tag filter page.
+These links are generated from `public.baseUrl`.
+
+Restock notification rule:
+
+- a product existed in the previous snapshot
+- it was out of stock before
+- it becomes in stock in the latest sync
+- the product has not already been marked as restock-notified for this `0 -> 1` transition
+
+This prevents the same restocked item from being sent repeatedly on every later sync.
 
 ## GitHub Hosting Notes
 
 If you plan to host this project on GitHub:
 
 - Commit `app.config.example.json`
-- Commit `data.example.json`
 - Do not commit `app.config.json`
 - Do not commit `data/`
 - Do not commit real admin credentials, Telegram tokens, or private URLs
@@ -139,7 +183,6 @@ Recommended repository contents:
 - `Dockerfile`
 - `docker-compose.yml`
 - `app.config.example.json`
-- `data.example.json`
 - `README.md`
 
 Do not rely on GitHub to store production secrets.
@@ -182,7 +225,8 @@ Config changed but not applied:
 
 `Error: EISDIR: illegal operation on a directory, open '/app/data.json'`
 
-- this means the old deployment mounted `./data.json` as a directory
+- this is only relevant when migrating from an old JSON-based deployment
+- it means the old deployment mounted `./data.json` as a directory
 - switch to the current compose file that mounts `./data:/app/data`
 - then run:
 
@@ -190,6 +234,5 @@ Config changed but not applied:
 docker compose down
 rm -rf data.json
 mkdir -p data
-cp data.example.json data/data.json
 docker compose up -d --build
 ```

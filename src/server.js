@@ -17,6 +17,12 @@ import {
   getTrafficStats,
   listCountryDictionary,
   listBlockedProducts,
+  getProductTagById,
+  addProductTag,
+  replaceProductTagItemsForSite,
+  updateProductTag,
+  deleteProductTag,
+  listProductTags,
   listItemsByMerchant,
   listItemsBySite,
   listUnknownCountryHints,
@@ -30,6 +36,7 @@ import {
   updateCountryDictionaryRule,
   updateSettings,
   replaceBlockedProductsForSite,
+  replaceProductTagsForSite,
   updateSite,
   updateUserCredentials
 } from './db.js';
@@ -125,6 +132,7 @@ app.get('/', (_req, res) => {
   addViewEvent('/');
   const merchant = String(_req.query.merchant || '').trim();
   const country = String(_req.query.country || '').trim();
+  const tag = String(_req.query.tag || '').trim();
   const stock = String(_req.query.stock || '').trim();
   const currency = String(_req.query.currency || '').trim().toUpperCase();
   const priceRange = String(_req.query.priceRange || '').trim();
@@ -151,6 +159,7 @@ app.get('/', (_req, res) => {
 
   const merchants = [...new Set(allItems.map((i) => i.site_name).filter(Boolean))].sort();
   const countries = [...new Set(allItems.map((i) => i._country).filter(Boolean))].sort();
+  const tags = [...new Set(allItems.flatMap((i) => Array.isArray(i.product_tags) ? i.product_tags : []).filter(Boolean))].sort();
 
   let minPrice = 0;
   let maxPrice = 0;
@@ -163,6 +172,7 @@ app.get('/', (_req, res) => {
   const items = allItems.filter((item) => {
     if (merchant && item.site_name !== merchant) return false;
     if (country && item._country !== country) return false;
+    if (tag && !(Array.isArray(item.product_tags) && item.product_tags.includes(tag))) return false;
     if (stock === 'in' && item.in_stock !== 1) return false;
     if (stock === 'out' && item.in_stock !== 0) return false;
     if (currency && !String(item.price || '').toUpperCase().includes(currency)) return false;
@@ -189,15 +199,16 @@ app.get('/', (_req, res) => {
       };
     });
 
-  const isFiltered = Boolean(merchant || country || stock || currency || priceRange);
+  const isFiltered = Boolean(merchant || country || tag || stock || currency || priceRange);
 
   return res.render('public', {
     items,
     merchants,
     countries,
+    tags,
     merchantCards,
     isFiltered,
-    filters: { merchant, country, stock, currency, priceRange },
+    filters: { merchant, country, tag, stock, currency, priceRange },
     settings: getSettings()
   });
 });
@@ -247,6 +258,7 @@ app.get('/admin/profile', authRequired, (req, res) => {
     accountError: '',
     accountSuccess: '',
     settings: getSettings(),
+    settingsError: '',
     settingsSuccess: ''
   });
 });
@@ -258,18 +270,15 @@ app.get('/admin/sites', authRequired, (req, res) => {
 
 app.get('/admin/blocked-products', authRequired, (req, res) => {
   const sites = listSites();
-  const selectedSiteId = Number(req.query.siteId || 0);
-  const selectedSite = selectedSiteId ? sites.find((s) => s.id === selectedSiteId) : null;
-  const items = selectedSite ? listItemsByMerchant(selectedSiteId) : [];
-  const blocked = listBlockedProducts().filter((b) => Number(b.site_id) === selectedSiteId);
-  const blockedSet = new Set(blocked.map((b) => String(b.title || '').trim()));
+  const siteItemsMap = new Map(sites.map((site) => [Number(site.id), listItemsByMerchant(site.id)]));
+  const blockedRows = listBlockedProducts();
+  const blockedMap = new Map(sites.map((site) => [Number(site.id), new Set(blockedRows.filter((b) => Number(b.site_id) === Number(site.id)).map((b) => String(b.title || '').trim()))]));
   return res.render('admin-blocked-products', {
     user: req.session.user,
     adminBase: `/${getSettings().admin_path}`,
     sites,
-    selectedSiteId,
-    items,
-    blockedSet
+    siteItemsMap,
+    blockedMap
   });
 });
 
@@ -282,6 +291,58 @@ app.post('/admin/blocked-products', authRequired, (req, res) => {
     : [];
   replaceBlockedProductsForSite(siteId, titles);
   return res.redirect(`/${getSettings().admin_path}/blocked-products?siteId=${siteId}`);
+});
+
+app.get('/admin/product-tags', authRequired, (req, res) => {
+  return res.render('admin-product-tags', {
+    user: req.session.user,
+    adminBase: `/${getSettings().admin_path}`,
+    tags: listProductTags()
+  });
+});
+
+app.post('/admin/product-tags', authRequired, (req, res) => {
+  const result = addProductTag(String(req.body.name || ''));
+  return res.redirect(`/${getSettings().admin_path}/product-tags`);
+});
+
+app.get('/admin/product-tags/:id/edit', authRequired, (req, res) => {
+  const tagId = Number(req.params.id);
+  const tag = getProductTagById(tagId);
+  if (!tag) return res.status(404).send('Tag not found');
+  const sites = listSites();
+  const selectedSiteId = Number(req.query.siteId || 0);
+  const selectedSite = selectedSiteId ? sites.find((s) => s.id === selectedSiteId) : null;
+  const items = selectedSite ? listItemsByMerchant(selectedSiteId) : [];
+  const taggedSet = new Set(tag.items.filter((row) => Number(row.site_id) === selectedSiteId).map((row) => String(row.title || '').trim()));
+  return res.render('edit-product-tag', {
+    user: req.session.user,
+    adminBase: `/${getSettings().admin_path}`,
+    tag,
+    sites,
+    selectedSiteId,
+    items,
+    taggedSet
+  });
+});
+
+app.post('/admin/product-tags/:id/edit', authRequired, (req, res) => {
+  const tagId = Number(req.params.id);
+  const siteId = Number(req.body.siteId || 0);
+  const name = String(req.body.name || '').trim();
+  updateProductTag(tagId, name);
+  const selectedTitles = req.body.selectedTitles ? (Array.isArray(req.body.selectedTitles) ? req.body.selectedTitles : [req.body.selectedTitles]) : [];
+  replaceProductTagItemsForSite(tagId, siteId, selectedTitles);
+  return res.redirect(`/${getSettings().admin_path}/product-tags/${tagId}/edit?siteId=${siteId}`);
+});
+
+app.get('/admin/product-tags/:id', authRequired, (req, res) => {
+  return res.redirect(`/${getSettings().admin_path}/product-tags`);
+});
+
+app.post('/admin/product-tags/:id/delete', authRequired, (req, res) => {
+  deleteProductTag(Number(req.params.id));
+  return res.redirect(`/${getSettings().admin_path}/product-tags`);
 });
 
 app.get('/admin/countries', authRequired, (req, res) => {
@@ -321,50 +382,79 @@ app.post('/admin/country-rules/:id/delete', authRequired, (req, res) => {
 });
 
 app.post('/admin/account', authRequired, (req, res) => {
-  const { username, password } = req.body;
-  if (!username || String(username).trim().length < 3) {
-    return res.render('admin-profile', { user: req.session.user, adminBase: `/${getSettings().admin_path}`, accountError: '用户名至少3位', accountSuccess: '', settings: getSettings(), settingsSuccess: '' });
-  }
+  try {
+    const { username, password } = req.body;
+    if (!username || String(username).trim().length < 3) {
+      return res.render('admin-profile', { user: req.session.user, adminBase: `/${getSettings().admin_path}`, accountError: '用户名至少3位', accountSuccess: '', settings: getSettings(), settingsError: '', settingsSuccess: '' });
+    }
 
-  const result = updateUserCredentials(req.session.user.id, String(username).trim(), String(password || '').trim());
-  if (!result.ok) {
-    return res.render('admin-profile', { user: req.session.user, adminBase: `/${getSettings().admin_path}`, accountError: result.message, accountSuccess: '', settings: getSettings(), settingsSuccess: '' });
-  }
+    const result = updateUserCredentials(req.session.user.id, String(username).trim(), String(password || '').trim());
+    if (!result.ok) {
+      return res.render('admin-profile', { user: req.session.user, adminBase: `/${getSettings().admin_path}`, accountError: result.message, accountSuccess: '', settings: getSettings(), settingsError: '', settingsSuccess: '' });
+    }
 
-  req.session.user.username = result.user.username;
-  return res.render('admin-profile', { user: req.session.user, adminBase: `/${getSettings().admin_path}`, accountError: '', accountSuccess: '账号信息更新成功', settings: getSettings(), settingsSuccess: '' });
+    req.session.user.username = result.user.username;
+    return res.render('admin-profile', { user: req.session.user, adminBase: `/${getSettings().admin_path}`, accountError: '', accountSuccess: '账号信息更新成功', settings: getSettings(), settingsError: '', settingsSuccess: '' });
+  } catch (error) {
+    return res.render('admin-profile', {
+      user: req.session.user,
+      adminBase: `/${getSettings().admin_path}`,
+      accountError: `账号信息保存失败: ${String(error.message || error)}`,
+      accountSuccess: '',
+      settings: getSettings(),
+      settingsError: '',
+      settingsSuccess: ''
+    });
+  }
 });
 
 app.post('/admin/settings', authRequired, (req, res) => {
-  const {
-    publicTitle,
-    publicBackgroundImage,
-    telegramBotToken,
-    telegramChatId,
-    adminPath,
-    monitorConcurrency,
-    monitorIdleDelayMs,
-    monitorSiteTimeoutMs
-  } = req.body;
-  updateSettings({
-    public_title: publicTitle,
-    public_background_image: publicBackgroundImage,
-    telegram_bot_token: telegramBotToken,
-    telegram_chat_id: telegramChatId,
-    admin_path: adminPath,
-    monitor_concurrency: monitorConcurrency,
-    monitor_idle_delay_ms: monitorIdleDelayMs,
-    monitor_site_timeout_ms: monitorSiteTimeoutMs
-  });
-  const latest = getSettings();
-  return res.render('admin-profile', {
-    user: req.session.user,
-    adminBase: `/${latest.admin_path}`,
-    accountError: '',
-    accountSuccess: '',
-    settings: latest,
-    settingsSuccess: `系统设置更新成功，新的后台地址：/${latest.admin_path}`
-  });
+  try {
+    const {
+      publicTitle,
+      publicBackgroundImage,
+      publicBaseUrl,
+      telegramBotToken,
+      telegramRestockChatId,
+      adminPath,
+      monitorConcurrency,
+      monitorIdleDelayMs,
+      monitorSiteTimeoutMs
+    } = req.body;
+    updateSettings({
+      public_title: publicTitle,
+      public_background_image: publicBackgroundImage,
+      public_base_url: publicBaseUrl,
+      telegram_bot_token: telegramBotToken,
+      telegram_chat_id: '',
+      telegram_restock_chat_id: telegramRestockChatId,
+      admin_path: adminPath,
+      monitor_concurrency: monitorConcurrency,
+      monitor_idle_delay_ms: monitorIdleDelayMs,
+      monitor_site_timeout_ms: monitorSiteTimeoutMs
+    });
+    const latest = getSettings();
+    return res.render('admin-profile', {
+      user: req.session.user,
+      adminBase: `/${latest.admin_path}`,
+      accountError: '',
+      accountSuccess: '',
+      settings: latest,
+      settingsError: '',
+      settingsSuccess: `系统设置更新成功，新的后台地址：/${latest.admin_path}`
+    });
+  } catch (error) {
+    const latest = getSettings();
+    return res.render('admin-profile', {
+      user: req.session.user,
+      adminBase: `/${latest.admin_path}`,
+      accountError: '',
+      accountSuccess: '',
+      settings: latest,
+      settingsError: `系统设置保存失败: ${String(error.message || error)}`,
+      settingsSuccess: ''
+    });
+  }
 });
 
 app.post('/admin/sites', authRequired, (req, res) => {

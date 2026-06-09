@@ -17,4 +17,14 @@
   .cell-url{max-width:360px;word-break:break-all}
   .checkline{display:flex;align-items:center;gap:8px;min-height:40px}.checkline input{width:auto;margin:0}
   .ok{color:var(--ok);font-weight:700}.bad{color:var(--danger);font-weight:700}
+  .section-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+  .card-list{display:grid;gap:10px}
+  .card{border:1px solid var(--line);border-radius:12px;background:#fcfeff;padding:12px}
+  .card summary{cursor:pointer;list-style:none}
+  .card summary::-webkit-details-marker{display:none}
+  .pill{display:inline-block;padding:4px 8px;border-radius:999px;background:#edf6f5;color:#0f766e;font-size:12px}
+  .modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;padding:16px;z-index:50}
+  .modal-backdrop.open{display:flex}
+  .modal{width:min(760px,100%);max-height:90vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:0 18px 50px rgba(15,23,42,.22)}
+  .plain-btn{background:transparent;color:var(--primary);padding:0;border:0;font:inherit;cursor:pointer}
 </style>

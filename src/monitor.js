@@ -1,15 +1,18 @@
 import {
   addEvent,
   consumeUnknownCountryHint,
+  getSettings,
+  getProductTagsForItem,
   listCountryDictionary,
   listEnabledSites,
+  listItemsBySite,
+  markRestockNotified,
   markSiteSynced,
   replaceItemsBySite,
-  getSettings,
   upsertUnknownCountryHint
 } from './db.js';
 import { buildAffLink, fetchInventoryWithMeta } from './scraper.js';
-import { sendTelegram } from './notify.js';
+import { escapeHtml, sendRestockTelegram } from './notify.js';
 
 // siteId -> lock start timestamp(ms)
 const siteRunLocks = new Map();
@@ -49,6 +52,80 @@ function buildSnapshot(site, items) {
     const rawJson = JSON.stringify({ ...item, affLink });
     return { ...item, rawJson };
   });
+}
+
+function parseRawJson(rawJson) {
+  try {
+    return JSON.parse(String(rawJson || '{}'));
+  } catch (_e) {
+    return {};
+  }
+}
+
+function formatRestockMessage(site, item) {
+  const raw = parseRawJson(item.rawJson);
+  const country = raw.country || '未知';
+  const billingPeriod = raw.billingPeriod || '';
+  const affLink = raw.affLink || site.aff_base_url || site.url || '';
+  const tags = getProductTagsForItem(site.id, item.title);
+  const settings = getSettings();
+  const baseUrl = String(settings.public_base_url || '').trim().replace(/\/+$/, '');
+  const tagLine = tags.length
+    ? tags.map((tag) => {
+        if (!baseUrl) return `#${escapeHtml(tag)}`;
+        const href = `${baseUrl}/?merchant=&country=&tag=${encodeURIComponent(tag)}&stock=&currency=&priceRange=`;
+        return `<a href="${escapeHtml(href)}">#${escapeHtml(tag)}</a>`;
+      }).join('')
+    : '';
+  return [
+    '🟢 产品补货通知',
+    `商家: ${escapeHtml(site.name)}`,
+    `产品: ${escapeHtml(item.title)}`,
+    `配置: ${escapeHtml(raw.config || '-')}`,
+    `价格: ${escapeHtml(item.price || '-')}${escapeHtml(billingPeriod)}`,
+    `国家: ${escapeHtml(country)}`,
+    `链接: ${escapeHtml(affLink)}`,
+    tagLine
+  ].filter(Boolean).join('\n');
+}
+
+async function notifyRestocks(site, previousItems, snapshot) {
+  const previousMap = new Map();
+  for (const item of previousItems || []) {
+    const key = String(item.item_key || item.title || '');
+    if (!key) continue;
+    previousMap.set(key, item);
+  }
+
+  const restocked = [];
+  for (const item of snapshot || []) {
+    if (Number(item.inStock) !== 1) continue;
+    const key = String(item.itemKey || item.title || '');
+    if (!key) continue;
+    const oldItem = previousMap.get(key);
+    if (!oldItem && item.title) {
+      for (const candidate of previousItems || []) {
+        if (String(candidate.title || '') === String(item.title || '')) {
+          previousMap.set(key, candidate);
+          break;
+        }
+      }
+    }
+    const matchedOld = previousMap.get(key);
+    if (!matchedOld) continue;
+    if (Number(matchedOld.in_stock) === 1) continue;
+    if (Number(matchedOld.restock_notified || 0) === 1) continue;
+    restocked.push(item);
+  }
+
+  if (restocked.length === 0) return;
+
+  const settings = getSettings();
+  for (const item of restocked) {
+    addEvent(site.id, item.itemKey, item.title, 0, 1, 'restock');
+    await sendRestockTelegram(settings, formatRestockMessage(site, item));
+    markRestockNotified(site.id, item.itemKey, item.title);
+  }
 }
 
 function normalize(text) {
@@ -116,12 +193,12 @@ async function syncOneSite(site) {
         learnUnknownCountry(item);
       }
     });
+    const previousItems = listItemsBySite(site.id);
     const snapshot = buildSnapshot(site, items);
     replaceItemsBySite(site.id, snapshot);
     markSiteSynced(site.id);
     addEvent(site.id, 'site_sync', site.name, null, items.length, 'sync_success');
-    const settings = getSettings();
-    await sendTelegram(settings, `✅ 同步成功\n商家: ${site.name}\n产品数: ${items.length}`);
+    await notifyRestocks(site, previousItems, snapshot);
     addEvent(
       site.id,
       'site_diag',
@@ -132,8 +209,6 @@ async function syncOneSite(site) {
     );
   } catch (error) {
     addEvent(site.id, 'site_error', site.name, null, 0, `error:${String(error.message || error)}`);
-    const settings = getSettings();
-    await sendTelegram(settings, `❌ 同步失败\n商家: ${site.name}\n错误: ${String(error.message || error)}`);
   } finally {
     releaseSiteLock(site);
   }

@@ -224,6 +224,110 @@ function parseGeneric(html) {
   return products;
 }
 
+function getBillingPeriodLabel(period) {
+  const text = String(period || '');
+  return /monthly/i.test(text) ? '/月'
+    : /quarterly/i.test(text) ? '/季度'
+    : /semi-annually/i.test(text) ? '/半年'
+    : /annually|yearly/i.test(text) ? '/年'
+    : /biennially/i.test(text) ? '/两年'
+    : /triennially/i.test(text) ? '/三年'
+    : '';
+}
+
+function getBillingCycleWeight(period) {
+  const text = String(period || '').toLowerCase();
+  if (text.includes('monthly')) return 1;
+  if (text.includes('quarterly')) return 3;
+  if (text.includes('semi-annually')) return 6;
+  if (text.includes('annually') || text.includes('yearly')) return 12;
+  if (text.includes('biennially')) return 24;
+  if (text.includes('triennially')) return 36;
+  return 999;
+}
+
+function normalizeBwhPriceOptions(prices = []) {
+  return [...prices]
+    .map((one) => ({
+      cents: Number(one.cents || 0),
+      currency: String(one.currency || 'USD'),
+      period: String(one.period || ''),
+      billingPeriod: getBillingPeriodLabel(one.period),
+      cycleWeight: getBillingCycleWeight(one.period)
+    }))
+    .sort((a, b) => a.cycleWeight - b.cycleWeight || a.cents - b.cents);
+}
+
+function formatBwhPrice(prices = []) {
+  const options = normalizeBwhPriceOptions(prices);
+  const preferred = options[0] || null;
+  if (!preferred) return { price: '', billingPeriod: '', priceOptions: [] };
+  const amount = preferred.cents / 100;
+  return {
+    price: `${preferred.currency} ${amount.toFixed(2)}`,
+    billingPeriod: preferred.billingPeriod,
+    priceOptions: options.map((option) => ({
+      price: `${option.currency} ${(option.cents / 100).toFixed(2)}`,
+      billingPeriod: option.billingPeriod,
+      period: option.period,
+      cycleWeight: option.cycleWeight
+    }))
+  };
+}
+
+function buildBwhConfig(item) {
+  const datacenters = Object.keys(item.datacenters || {});
+  const lines = [
+    `CPU: ${item.cpu || 0} 核`,
+    `内存: ${item.ram || 0} MB`,
+    `硬盘: ${item.ssd || 0} MB`,
+    `流量: ${item.transfer || 0} MB`,
+    `端口: ${item.link || 0} Mbps`
+  ];
+  if (item.tiers && item.tiers.length > 0) {
+    lines.push(`分类: ${item.tiers.join(', ')}`);
+  }
+  if (datacenters.length > 0) {
+    lines.push(`机房: ${datacenters.join(', ')}`);
+  }
+  return lines.join('\n');
+}
+
+async function fetchBwhInventory(site) {
+  const apiUrl = toAbsoluteUrl(site.url, '/order/get-data');
+  const response = await axios.get(apiUrl, {
+    timeout: Number(site.request_timeout_ms || 20000),
+    validateStatus: () => true,
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      Accept: 'application/json,text/plain,*/*'
+    }
+  });
+  if (response.status >= 400) throw new Error(`http_${response.status}`);
+  const list = Array.isArray(response.data)
+    ? response.data
+    : Array.isArray(response.data && response.data.products)
+      ? response.data.products
+      : [];
+  return list.map((item) => {
+    const formatted = formatBwhPrice(item.prices || []);
+    const config = buildBwhConfig(item);
+    return {
+      itemKey: String(item.id || item.name || ''),
+      title: String(item.name || '').trim(),
+      price: formatted.price,
+      billingPeriod: formatted.billingPeriod,
+      priceOptions: formatted.priceOptions,
+      country: detectCountry(String(item.name || ''), config),
+      config,
+      inStock: item.outOfStock ? 0 : 1,
+      href: '',
+      pid: Number(item.id || 0) || null,
+      qty: item.outOfStock ? 0 : null
+    };
+  }).filter((item) => item.title);
+}
+
 function parseDmitCartProducts(html, pageUrl) {
   const $ = cheerio.load(html);
   const products = [];
@@ -365,6 +469,13 @@ export async function fetchInventory(site) {
       return '';
     }
   })());
+  const isBwhSite = /(^|\.)bwh81\.net$/i.test((() => {
+    try {
+      return new URL(siteUrl).hostname;
+    } catch (_e) {
+      return '';
+    }
+  })());
   
   const fetchMain = async (url) => {
     let lastError = null;
@@ -387,8 +498,13 @@ export async function fetchInventory(site) {
     return useBrowser ? await fetchHtmlWithFlareSolverr(url, verifyOptions) : await fetchHtml(url, verifyOptions);
   };
 
-  const html = await fetchMain(site.url);
   const parserType = (site.parser_type || 'whmcs').toLowerCase();
+
+  if (isBwhSite) {
+    return await fetchBwhInventory(site);
+  }
+
+  const html = await fetchMain(site.url);
 
   if (isDmitSite) {
     const cartHtml = await fetchMain(toAbsoluteUrl(site.url, '/cart.php'));

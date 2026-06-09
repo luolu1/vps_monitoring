@@ -11,69 +11,85 @@
     <%- include('partials-admin-nav',{user, adminBase}) %>
     <main class="main">
       <section class="panel">
-        <h2>添加监控站点</h2>
-        <form method="post" action="<%= adminBase %>/sites">
-          <div class="grid">
-            <div><label>站点名称</label><input name="name" required/></div>
-            <div><label>监控URL / AFF链接</label><input name="url" required/></div>
-            <div>
-              <label>站点架构</label>
-              <select name="parserType"><option value="whmcs" selected>WHMCS</option></select>
-            </div>
-            <div><label class="checkline"><input type="checkbox" name="enabled" checked/> 启用监控</label></div>
-            <div><label class="checkline"><input type="checkbox" name="autoEnabled" checked/> 自动检测</label></div>
-            <div><label>超时（毫秒）</label><input type="number" name="requestTimeoutMs" min="3000" value="20000" required/></div>
-            <div><label>重试次数</label><input type="number" name="retryCount" min="0" value="2" required/></div>
-            <div>
-              <label>抓取模式</label>
-              <select name="fetchMode"><option value="http">HTTP</option><option value="browser">Browser</option></select>
-            </div>
-            <div><label>CF等待（毫秒）</label><input type="number" name="cfWaitMs" min="3000" value="7000" required/></div>
-          </div>
-          <div style="margin-top:10px"><button type="submit">保存站点</button></div>
-        </form>
-      </section>
-
-      <section class="panel">
-        <h2>站点列表</h2>
+        <div class="section-head">
+          <h2>站点列表</h2>
+          <button type="button" class="btn" onclick="toggleAddSiteModal(true)">添加监控站点</button>
+        </div>
         <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th><th>名称</th><th>入口链接</th><th>架构</th><th>状态</th><th>自动</th><th>抓取</th><th>上次同步</th><th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <% if(!sites.length){ %>
-            <tr><td colspan="9">暂无站点</td></tr>
-            <% } %>
-            <% sites.forEach((s)=>{ %>
-            <tr>
-              <td><%= s.id %></td>
-              <td><%= s.name %></td>
-              <td class="cell-url"><%= s.url %></td>
-              <td><%= (s.parser_type||'whmcs').toUpperCase() %></td>
-              <td class="<%= s.enabled?'ok':'bad' %>"><%= s.enabled?'启用':'禁用' %></td>
-              <td class="<%= s.auto_enabled?'ok':'bad' %>"><%= s.auto_enabled?'开启':'关闭' %></td>
-              <td><%= s.fetch_mode === 'browser' ? 'Browser' : 'HTTP' %></td>
-              <td><%= s.last_sync_at || '-' %></td>
-              <td>
-                <div class="inline-form">
-                  <form method="post" action="<%= adminBase %>/sites/<%= s.id %>/toggle"><button type="submit"><%= s.enabled ? '禁用' : '启用' %></button></form>
-                  <form method="post" action="<%= adminBase %>/sites/<%= s.id %>/toggle-auto"><button type="submit"><%= s.auto_enabled ? '关自动' : '开自动' %></button></form>
-                  <form method="post" action="<%= adminBase %>/sites/<%= s.id %>/run-once"><button type="submit">立即同步</button></form>
-                  <form method="get" action="<%= adminBase %>/inventory/<%= s.id %>"><button type="submit">库存</button></form>
-                  <form method="get" action="<%= adminBase %>/sites/<%= s.id %>/edit"><button type="submit">编辑</button></form>
-                  <form method="post" action="<%= adminBase %>/sites/<%= s.id %>/delete" onsubmit="return confirm('确认删除该站点？')"><button type="submit">删除</button></form>
-                </div>
-              </td>
-            </tr>
-            <% }) %>
-          </tbody>
-        </table>
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th><th>名称</th><th>入口链接</th><th>架构</th><th>状态</th><th>自动</th><th>抓取</th><th>上次同步</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if(!sites.length){ %>
+              <tr><td colspan="9">暂无站点</td></tr>
+              <% } %>
+              <% sites.forEach((s)=>{ %>
+              <tr>
+                <td><%= s.id %></td>
+                <td><%= s.name %></td>
+                <td class="cell-url"><%= s.url %></td>
+                <td><%= (s.parser_type||'whmcs').toUpperCase() %></td>
+                <td class="<%= s.enabled?'ok':'bad' %>"><%= s.enabled?'启用':'禁用' %></td>
+                <td class="<%= s.auto_enabled?'ok':'bad' %>"><%= s.auto_enabled?'开启':'关闭' %></td>
+                <td><%= s.fetch_mode === 'browser' ? 'Browser' : 'HTTP' %></td>
+                <td><%= s.last_sync_at || '-' %></td>
+                <td>
+                  <div class="inline-form">
+                    <form method="post" action="<%= adminBase %>/sites/<%= s.id %>/toggle"><button type="submit"><%= s.enabled ? '禁用' : '启用' %></button></form>
+                    <form method="post" action="<%= adminBase %>/sites/<%= s.id %>/toggle-auto"><button type="submit"><%= s.auto_enabled ? '关自动' : '开自动' %></button></form>
+                    <form method="post" action="<%= adminBase %>/sites/<%= s.id %>/run-once"><button type="submit">立即同步</button></form>
+                    <form method="get" action="<%= adminBase %>/inventory/<%= s.id %>"><button type="submit">库存</button></form>
+                    <form method="get" action="<%= adminBase %>/sites/<%= s.id %>/edit"><button type="submit">编辑</button></form>
+                    <form method="post" action="<%= adminBase %>/sites/<%= s.id %>/delete" onsubmit="return confirm('确认删除该站点？')"><button type="submit">删除</button></form>
+                  </div>
+                </td>
+              </tr>
+              <% }) %>
+            </tbody>
+          </table>
         </div>
       </section>
     </main>
   </div>
+
+  <div id="addSiteModal" class="modal-backdrop" onclick="if(event.target===this) toggleAddSiteModal(false)">
+    <div class="modal">
+      <div class="section-head">
+        <h2>添加监控站点</h2>
+        <button type="button" class="btn" onclick="toggleAddSiteModal(false)">关闭</button>
+      </div>
+      <form method="post" action="<%= adminBase %>/sites">
+        <div class="grid">
+          <div><label>站点名称</label><input name="name" required/></div>
+          <div><label>监控URL / AFF链接</label><input name="url" required/></div>
+          <div>
+            <label>站点架构</label>
+            <select name="parserType"><option value="whmcs" selected>WHMCS</option></select>
+          </div>
+          <div><label class="checkline"><input type="checkbox" name="enabled" checked/> 启用监控</label></div>
+          <div><label class="checkline"><input type="checkbox" name="autoEnabled" checked/> 自动检测</label></div>
+          <div><label>超时（毫秒）</label><input type="number" name="requestTimeoutMs" min="3000" value="20000" required/></div>
+          <div><label>重试次数</label><input type="number" name="retryCount" min="0" value="2" required/></div>
+          <div>
+            <label>抓取模式</label>
+            <select name="fetchMode"><option value="http">HTTP</option><option value="browser">Browser</option></select>
+          </div>
+          <div><label>CF等待（毫秒）</label><input type="number" name="cfWaitMs" min="3000" value="7000" required/></div>
+        </div>
+        <div style="margin-top:10px"><button type="submit">保存站点</button></div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    function toggleAddSiteModal(open) {
+      var el = document.getElementById('addSiteModal');
+      if (!el) return;
+      el.classList.toggle('open', !!open);
+    }
+  </script>
 </body>
 </html>

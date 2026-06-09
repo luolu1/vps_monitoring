@@ -10,11 +10,12 @@
   },
   "public": {
     "title": "VPS库存监控前台",
-    "backgroundImage": ""
+    "backgroundImage": "",
+    "baseUrl": ""
   },
   "telegram": {
     "botToken": "",
-    "chatId": ""
+    "restockChatId": ""
   },
   "flaresolverr": {
     "url": "http://127.0.0.1:8191/v1"
