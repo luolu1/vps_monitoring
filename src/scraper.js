@@ -374,6 +374,143 @@ function parseDmitCartProducts(html, pageUrl) {
   return products;
 }
 
+function parseDmitPricingProducts(html, pageUrl) {
+  const $ = cheerio.load(html);
+  const products = [];
+  const seen = new Set();
+  const stockRegex = /(out of stock|sold out|unavailable|缺货|无货|售罄|sold\s*out|暂时缺货)/i;
+
+  function toPidFromAttr(href) {
+    const candidate = normalizeText(href || '');
+    if (!candidate) return null;
+    try {
+      const u = new URL(toAbsoluteUrl(pageUrl, candidate));
+      const pid = u.searchParams.get('pid');
+      if (pid && /^\d+$/.test(pid)) return Number(pid);
+    } catch (_e) {}
+    const m = String(candidate || '').match(/pid=(\d+)/i);
+    return m && m[1] ? Number(m[1]) : null;
+  }
+
+  function addItem({ title, price, period, stockText, configText, href, pid, pidAttr }) {
+    if (!title) return;
+    const finalPid = pid || toPidFromAttr(pidAttr) || toPidFromAttr(href);
+    const finalHref = toAbsoluteUrl(pageUrl, href || '');
+    const baseKey = String(finalPid || finalHref || title).trim();
+    if (!baseKey || seen.has(baseKey)) return;
+    seen.add(baseKey);
+
+    const normalizedPrice = normalizeText(price || '');
+    const normalizedConfig = normalizeText(configText || '');
+    const normalizedStockText = normalizeText(stockText || '');
+    const periodText = normalizeText(period || '');
+    const billingPeriod = getBillingPeriodLabel(periodText) || getBillingPeriodLabel(normalizedPrice);
+    const stockLower = normalizedStockText.toLowerCase();
+    const inStock = stockLower.includes('out of stock') || stockLower.includes('sold out') || normalizedStockText.includes('Out of Stock') || normalizedStockText.includes('OUT OF STOCK') || stockRegex.test(stockLower) ? 0 : 1;
+
+    if (!normalizedPrice && !normalizedConfig) return;
+
+    products.push({
+      itemKey: String(baseKey),
+      title: normalizeText(title),
+      price: normalizedPrice,
+      billingPeriod,
+      country: detectCountry(normalizedConfig ? normalizedConfig : title, normalizedConfig),
+      config: normalizedConfig || title,
+      inStock,
+      href: finalHref,
+      pid: finalPid ? Number(finalPid) || null : null,
+      qty: inStock ? null : 0
+    });
+  }
+
+  $('.plan-card').each((_, el) => {
+    const card = $(el);
+    const title = normalizeText(card.find('.plan-card-name').first().text());
+    const priceText = normalizeText(card.find('.plan-card-price').first().text()).replace(/\s*\/\s*/g, '/');
+
+    const configText = [
+      card.find('.plan-card-specs').first().text(),
+      card.closest('.plan-group').find(`.plan-cards`).first().text(),
+      card.closest('.plan-group').attr('data-loc'),
+      card.closest('.plan-group').attr('data-hw'),
+      card.closest('.plan-group').attr('data-net')
+    ].map((v) => normalizeText(v)).filter(Boolean).join(' | ');
+
+    const actionNode = card.find('.plan-card-action').first();
+    const btnText = normalizeText(actionNode.text());
+    const stockText = normalizeText(actionNode.find('button').first().text()) || btnText;
+    const disabled = actionNode.find('button.btn-order-disabled').length > 0 || /disabled/.test(String(actionNode.find('button').first().attr('disabled') || '').toLowerCase());
+    const onclick = normalizeText(actionNode.find('button').first().attr('onclick') || '');
+    const onclickPid = (onclick.match(/pid=(\d+)/i) || [])[1] || null;
+    const hrefFromClick = normalizeText(actionNode.find('a').first().attr('href') || '');
+    const pidFromAction = onclickPid ? Number(onclickPid) : null;
+
+    const periodText = normalizeText(card.find('.plan-card-price span, .plan-card-price small').first().text());
+
+    const normalizedHref = hrefFromClick || (pidFromAction ? `/cart.php?a=add&pid=${pidFromAction}` : '');
+
+    addItem({
+      title,
+      price: priceText,
+      period: periodText,
+      stockText: disabled || stockRegex.test(stockText) ? 'Out of Stock' : stockText,
+      configText,
+      href: normalizedHref,
+      pid: pidFromAction,
+      pidAttr: onclick
+    });
+  });
+
+  // Fallback for template variants where order buttons are rendered as plain links or nested inside different wrappers
+  $('a[href], button[onclick], .btn-order').each((_, el) => {
+    const node = $(el);
+    const root = node.closest('.plan-card').length ? node.closest('.plan-card') : node;
+    if (!/cart\.php\?a=add&pid=\d+/i.test(String(node.attr('onclick') || '')) && !/\/cart\.php\?a=add&pid=\d+/i.test(String(node.attr('href') || ''))) {
+      if (!/plan-card/.test(root.attr('class') || '')) return;
+    }
+    const title = normalizeText(root.find('.plan-card-name').first().text()) || normalizeText(root.closest('.plan-card').find('.plan-card-name').first().text());
+    if (!title) return;
+
+    const href = normalizeText(node.attr('href') || '');
+    const onclickText = normalizeText(node.attr('onclick') || '');
+    const pid = toPidFromAttr(href) || toPidFromAttr(onclickText);
+    const priceText = normalizeText(root.find('.plan-card-price').first().text()) || normalizeText(root.closest('.plan-card').find('.plan-card-price').first().text());
+    const config = normalizeText(root.find('.plan-card-specs').first().text()) || normalizeText(root.closest('.plan-card').find('.plan-card-specs').first().text());
+    const periodText = normalizeText(root.find('.plan-card-price span, .plan-card-price small').first().text());
+    const stockLabel = normalizeText(node.text());
+    const disabled = /disabled|out of stock/i.test(stockLabel || '');
+
+    addItem({
+      title,
+      price: priceText,
+      period: periodText,
+      stockText: disabled ? 'Out of Stock' : (stockLabel || 'In Stock'),
+      configText: config,
+      href,
+      pid,
+      pidAttr: onclickText
+    });
+  });
+
+  return products;
+}
+
+function mergeProductLists(...lists) {
+  const merged = [];
+  const seen = new Set();
+  const append = (items) => {
+    for (const item of items || []) {
+      const key = String(item.itemKey || item.href || item.title || '').trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(item);
+    }
+  };
+  for (const list of lists) append(list);
+  return merged;
+}
+
 function isDmitOutOfStockPage(html) {
   const text = normalizeText(String(html || '')).toLowerCase();
   return text.includes('out of stock')
@@ -507,8 +644,27 @@ export async function fetchInventory(site) {
   const html = await fetchMain(site.url);
 
   if (isDmitSite) {
-    const cartHtml = await fetchMain(toAbsoluteUrl(site.url, '/cart.php'));
-    return parseDmitCartProducts(cartHtml, site.url);
+    const pricingHtml = await fetchMain(toAbsoluteUrl(site.url, '/pages/pricing')).catch(() => null);
+    const cartHtml = await fetchMain(toAbsoluteUrl(site.url, '/cart.php')).catch(() => null);
+    const direct = mergeProductLists(
+      parseDmitPricingProducts(pricingHtml || html, site.url),
+      parseDmitCartProducts(cartHtml || html, site.url),
+      parseDmitCartProducts(html, site.url)
+    );
+    if (direct.length > 0) {
+      return verifyDmitInventory(fetchMain, site.url, direct);
+    }
+
+    const fallback = mergeProductLists(
+      parseTechnovmProducts(pricingHtml || html, site.url),
+      parseTechnovmProducts(cartHtml || html, site.url),
+      parseTechnovmProducts(html, site.url)
+    );
+    if (fallback.length > 0) {
+      return fallback;
+    }
+
+    return [];
   }
 
   if (parserType === 'technovm' || parserType === 'whmcs') {
